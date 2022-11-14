@@ -1,0 +1,184 @@
+#! /bin/sh
+
+#░█▀▄░█▀▀░█▀█░█░█░█▄█
+#░█▀▄░▀▀█░█▀▀░█▄█░█░█
+#░▀▀░░▀▀▀░▀░░░▀░▀░▀░▀
+
+bspc monitor LVDS-1 -d 1 2 3 4 5
+bspc monitor HDMI-1 -d 6 7 8 9 0
+#xdo below -t $(xdo id -n root) $(xdo id -a polybar-bottom_LVDS-1)
+
+###---Global Settings---###
+bspc config automatic_scheme alternate
+bspc config initial_polarity second_child
+bspc config pointer_action1 move
+bspc config pointer_action2 resize_side
+bspc config pointer_action2 resize_corner
+bspc config focus_follows_pointer false
+bspc config remove_disabled_monitors true
+bspc config remove_unplugged_monitors true
+bspc config merge_overlapping_monitors true
+bspc config border_width 2
+bspc config window_gap 10
+bspc config split_ratio 0.52
+bspc config borderless_monocle true
+bspc config gapless_monocle true
+bspc config swallow_first_click false
+bspc config pointer_modifier mod1
+#bspc config pointer_action1 resize_side
+#bspc config pointer_action1 resize_corner
+#bspc config pointer_action3 move
+bspc config normal_border_color "#282828"
+bspc config active_border_color "#ebdbb2"
+bspc config focused_border_color "#77dd77"
+bspc config presel_feedback_color "#BF616A"
+#bspc config normal_border_color "#282828"
+#bspc config active_border_color "#ebdbb2"
+#bspc config focused_border_color "#fe8019"
+
+# remove all rules first
+bspc rule -r *:*
+
+#bspc rule -a Plank layer=above manage=on border=off focus=off locked=off
+bspc rule -a Plank layer=above border=off 
+
+
+###---Autostart---####
+#pkill sxhkd; sxhkd &
+pgrep -x sxhkd > /dev/null || sxhkd &
+picom -b --experimental-backends &
+if [[ $(xrandr -q | grep 'HDMI-1 connected') ]]; then
+    xrandr --output LVDS-1 --primary --mode 1366x768 --rotate normal --output HDMI-1 --mode 1920x1080 --rotate normal --right-of LVDS-1
+fi
+xfce4-panel --disable-wm-check &
+"$HOME"/.config/polybar/launch.sh &
+dunst & # notification daemon
+unclutter &		# Remove mouse when idle
+nitrogen --force-setter=xinerama --restore &
+bspc rule -a \* rectangle=680x700+340+40
+bspc rule -a '*:*:Picture-in-Picture' state=floating sticky=on layer=above 
+bspc rule -a '*:*:Picture in picture' state=floating sticky=on layer=above 
+#if [ -n "Picture-in-Picture" ]; then
+#      xdo raise "Picture-in-Picture"
+#fi
+bspc rule -a firefox:Toolkit focus=on state=floating sticky=on layer=above rectangle=320x190+1030+480
+#bspc rule -a firefox:Toolkit sticky=on state=floating
+#bspc rule -a firefox desktop='^3' state=pseudo_tiled rectangle=1260x760+0+0 center=on follow=on
+#bspc rule -a firefox:firefox state=floating rectangle=748x478+0+0 center=on sticky=on
+#bspc rule -a firefox:Firefox state=floating rectangle=499x289+0+0 center=on sticky=on
+#bspc rule -a InputOutput state=floating sticky=on
+bspc rule -a "https://www.youtube.com - Enhancer for YouTube™ — Mozilla Firefox" state=floating sticky=on layer=above
+#bspc rule -a firefox state=floating
+bspc rule -a Zathura state=floating
+
+eww daemon &
+#killall bspswallow
+#pidof bspswallow | bspswallow &
+#fcitx -d &
+#plank &
+#bspc rule -a scratchpad sticky=on state=floating rectangle=560x260+500+0
+#killall plank; plank; xdotool search --class Plank windowraise &
+#xdotool search --onlyvisible --class Plank set_window $window_id windowraise &
+#xdotool search --class Plank windowreparent &
+
+# SCRATCHPAD
+
+#scratchpad_xy="750x265"
+#display_xy=$(xdpyinfo | grep -i dimensions | awk '{ print $2 }')
+#half_display=$(echo $display_xy | tr 'x' ' ' | cut -f1 -d' ' | xargs -I _ echo _/2 | bc)
+#half_scratchpad=$(echo $scratchpad_xy | tr 'x' ' ' | cut -f1 -d' ' | xargs -I _ echo _/2 | bc)
+#offset=$(echo ${half_display}-${half_scratchpad} | bc)
+
+#sid=$(wmctrl -lx | grep scratch.scratchpad| cut -d' ' -f1| head -1) \
+#&& [ -z "$(echo $sid)" ] \
+#	&& alacritty -t scratchpad --class scratch,scratchpad -e zsh -c "zsh tmux attach -t scratch || tmux new -s scratch"\
+#	& sleep 1 \
+#	&& sid=$(wmctrl -lx | grep scratch.scratchpad| cut -d' ' -f1| head -1) \
+#	&& echo "$sid" > /tmp/scratchID ;
+#-e tmux attach -t scratchpad || tmux new -s scratchpad;
+#-e zsh -c "macchina; zsh"\
+#bspc rule -a scratchpad sticky=on state=floating hidden=on rectangle=750x265+310+480
+#bspc rule -a scratchpad sticky=on state=floating rectangle=800x240+281+502
+#bspc rule -a scratchpad sticky=on state=floating focus=on rectangle=800x240+280+500
+#bspc rule -a alacritty sticky=on state=floating focus=on rectangle=680x700+340+40
+
+#bspc rule -a scratchpad sticky=on state=floating focus=on rectangle=680x260+340+420
+#bspc rule -a scratchpad sticky=on state=floating focus=on rectangle=510x520+425+200
+#bspc rule -a scratchpad sticky=on state=floating focus=on rectangle=465x320+425+390
+#bspc rule -a scratchpad sticky=on state=floating focus=on rectangle=425x390+468+320
+bspc rule -a scratch sticky=on state=floating rectangle=575x320+393+370
+#bspc rule -a scratchpad sticky=on state=floating focus=on
+
+
+#bspc rule -a scratch sticky=on state=floating focus=on rectangle=680x300+340+420
+bspc rule -a Heads-Up-Display sticky=on state=floating rectangle=320x140+1030+32
+[ "$1" = 0 ] && {
+    nm-applet &
+    plank & 
+}
+#if [ -n plank ]; then
+#      xdo above plank
+#fi
+#xdotool search --classname plank windowraise 
+#xdotool search --classname plank windowraise 
+#xdotool getwindowfocus getwindowgeometry
+#scratchpad -e bspc node -g hidden &
+#xdotool search --sync --class scratchpad windowunmap --sync %@ 
+# Autostart
+#plank=/tmp/bspwm-startup.lock
+#if [ ! -f $plank ]; then
+#  echo "dummy" > $plank
+#  plank &
+#fi
+# Autostart
+#touch /tmp/bspwm-startup.lock
+#startup_lock_file=/tmp/bspwm-startup.lock
+#if [ ! -f $startup_lock_file ]; then
+#  echo "dummy" > $startup_lock_file
+#  plank &
+#fi
+
+pkill xfce4-power-manager; sleep 1 && nice -n 1 xfce4-power-manager &
+pkill volumeicon; sleep 2 && nice -n 2 volumeicon &
+pkill mictray; sleep 2 && nice -n 2 mictray &
+#pkill blueman-applet; sleep 3 && nice -n 3 blueman-applet &
+#pkill qlipper; sleep 6 && nice -n 6 qlipper &
+
+bspc subscribe node_state | while read -r _ _ _ _ state flag; do
+  if [[ "$state" != fullscreen ]]; then continue; fi
+  if [[ "$flag" == on ]]; then
+    xdo lower -N Plank
+  else
+    xdo raise -N Plank
+  fi
+done &
+
+#killall plank; plank & 
+#bspc rule -a kitty sticky=on state=floating rectangle=420x260+11+22
+#pkill nm-applet; nm-applet &
+#pkill xfce4-power-manager; xfce4-power-manager &
+#pkill volumeicon; volumeicon &
+#pkill mictray; mictray &
+#pkill blueman-applet; blueman-applet &
+#pkill qlipper; qlipper &
+#flameshot &
+#sleep 1 && nice -n 0 pkill nm-applet; nm-applet &
+#sleep 2 && nice -n 1 pkill xfce4-power-manager; xfce4-power-manager &
+#sleep 3 && nice -n 2 pkill volumeicon; volumeicon &
+#sleep 4 && nice -n 2 pkill mictray; mictray &
+#sleep 5 && nice -n 3 pkill blueman-applet; blueman-applet &
+#sleep 6 && nice -n 5 pkill qlipper; qlipper &
+#sleep 1 && nice -n 18 pkill udiskie; udiskie --no-automount --tray &
+xrdb ~/.config/X11/.Xresources &
+# Start tmux if not already running
+# Calculate the center of the screen for a 600x400 scratchpad
+# rectangle=WidthxHeight+Xoffset+Yoffset
+#bspc rule -a scratchy sticky=on state=floating rectangle=${scratchpad_xy}+${offset}+0
+#xdo above -t "$(xdo id -N Bspwm -n root | sort | head -n 1)" $(xdo id -n polybar bottom)
+#xdo lower -N polybar bottom
+#xdo above -N polybar bottom -t $(xdo id -N Bspwm -n root)
+#xdo below -t $(xdo id -n root) $(xdo id -a polybar bottom)
+#xdo lower -N "polybar"
+#xdo above -N "polybar" -t $(xdo id -N Bspwm -n root)
+#xdo below -t $(xdo id -n root) $(xdo id -a polybar-bottom_LDVS-1)
+bspc config external_rules_command ~/.config/bspwm/scripts/external_rules.sh
