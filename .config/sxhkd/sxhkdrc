@@ -1,0 +1,487 @@
+#
+# wm independent hotkeys
+#
+
+
+# help
+super + F1
+         ~/.config/sxhkd/show_help.sh -m -3
+
+# application menu
+super + a
+	~/.config/polybar/scripts/menu.sh
+
+# shutdown menu
+ctrl + alt + Delete
+	~/.config/polybar/scripts/sysmenu.sh
+
+# run launcher
+super + r
+	rofi -show run
+
+# toggle sticky
+#super + q
+#  bspc node -g sticky=on
+
+# Scratchpad Terminal
+super + e
+	~/.local/bin/scripts/Heads-Up-Display
+
+super + {equal,minus}
+    layer.sh {+,-}
+
+# Scratchpad
+super + semicolon
+	~/.local/bin/scripts/scratchpad
+
+#{~/.local/bin/scripts/scratchpad, bspc rule -a \* -o state=floating sticky=on floating=on rectangle=680x260+340+460}
+#sid=$(cat /tmp/scratchID);\
+#cid=$(cat /tmp/calcID);\
+#wmctrl -ir $sid -b toggle,hidden && wmctrl -ir $cid -b add,hidden; wmctrl -ia $sid	
+
+#super + apostrophe
+#	{~/.local/bin/scripts/scratchpad, bspc rule -a \* -o state=floating sticky=on floating=on rectangle=680x700+340+40}
+
+
+#super + x
+#	~/.local/bin/scripts/scratchpad
+
+# open st (simple terminal) 
+#super + colon
+#	st
+
+# Bitwarden-rofi
+super + shift + b
+  rofi-rbw
+	#bwmenu -c 15
+
+# thunderbird mail
+#super + shift + m
+#    thunderbird
+
+# discord
+super + shift + d
+    discord
+
+# Spotify
+super + shift + y
+	spotify
+
+# lockscreen
+super + Escape
+	betterlockscreen -l
+
+# Show clipmenu
+alt + x
+    rofi -modi "clipboard:greenclip print" -show clipboard -run-command '{cmd}' \
+        -location 1 \
+        -m -3 \
+        -no-show-icons \
+        -theme-str '* \{ font: 10px; \}' \
+        -theme-str 'listview \{ spacing: 0; \}' \
+        -theme-str 'window \{ width: 20em; \}'
+
+# terminal emulator
+#super + Return
+super + x
+	alacritty
+	#urxvt
+	#$TERMINAL
+
+super + shift + z
+	zathura
+
+# program launcher
+super + @space
+	rofi -show drun
+
+# task switcher
+alt + Tab
+	rofi -show window
+
+# browser
+super + w
+	$BROWSER
+
+# neovim
+#super + v
+# 	kitty -e nvim
+
+# alacritty
+#super + x
+#	kitty
+
+# file manager nnn
+super + n
+	$TERMINAL -e nnn
+
+# file manager ranger
+super + shift + r
+	$TERMINAL -e ranger
+
+# file manager pcmanfm (GUI)
+super + shift + f
+	pcmanfm
+
+# Dictionary
+super + ctrl + w
+	goldendict
+
+# Thesaurus
+super + shift + w
+	artha
+
+# screenshots tool (selection)
+ctrl + Print
+	flameshot gui -p ~/pictures/screenshots
+
+# screenshots tool (screen)
+shift + Print
+	flameshot full -p ~/pictures/screenshots
+
+# turn off compositor
+super + shift + p
+	toggleprogram "picom" "--experimental-backends"
+
+#picom-trans -c -10
+#picom-trans -c +10
+
+# make sxhkd reload its configuration files:
+super + ctrl + x
+	pkill -USR1 -x sxhkd; dunstify "Sxhkd configuration reloaded"
+
+
+#
+# bspwm hotkeys
+#
+
+# quit/restart bspwm
+super + alt + shift + {q,r}
+	bspc {quit,wm -r}
+#super + alt + {q,r}
+#	bspc {quit,wm -r}
+
+
+# launch eww
+#super + ctrl + a
+#	~/.config/eww/launch_widgets.sh
+
+
+# close and kill
+super + d
+	bspc node -c
+
+# alternate between the tiled and monocle layout
+super + m
+	bspc desktop -l next
+
+
+# send the newest marked node to the newest preselected node
+super + y
+	bspc node newest.marked.local -n newest.!automatic.local
+
+# swap the current node and the biggest window
+super + g
+	bspc node -s biggest.window
+
+#
+# state/flags
+#
+
+# set the window state
+#super + {t,shift + t,s,f}
+#	bspc node -t {tiled,pseudo_tiled,floating,fullscreen}
+
+# set the window state
+super + {t,shift + t,s}
+	bspc node -t {tiled,pseudo_tiled,floating}; \
+	xdo raise -N Plank; \
+	xdo raise -N '*:*:Picture in picture'; \
+    xdo raise -N "Picture-in-Picture"
+#	xdo raise -N Plank; \
+#	xdo raise -a polybar-left_LVDS-1; \
+#	xdo raise -a polybar-bottom_LVDS-1
+	
+	#polybar-msg cmd show 
+
+
+#xdo raise -p $(pidof polybar-bottom_LDVS-1)
+#bspc node -t \~fullscreen
+super + {f}
+	bspc node -t \~fullscreen
+    #bspc window -t floating=off; \
+	#bspc node -t {fullscreen}; \
+	#xdo lower -N Plank
+#	xdo lower -N Plank; \
+#	xdo lower -a polybar-left_LVDS-1; \
+#	xdo lower -a polybar-bottom_LVDS-1
+	#bspc node -t \~{fullscreen}; \
+
+# set the node flags
+super + ctrl + {m,x,y,z}
+	bspc node -g {marked,locked,sticky,private}
+
+#
+# focus/swap
+#
+
+# focus the node in the given direction
+super + {_,shift + }{h,j,k,l}
+	bspc node -{f,s} {west,south,north,east}
+
+# focus the node for the given path jump
+#super + {p,b,comma,period}
+#	bspc node -f @{parent,brother,first,second}
+
+# focus the next/previous window in the current desktop
+super + {_,shift + }c
+	bspc node -f {next,prev}.local.!hidden.window
+
+# focus the next/previous desktop in the current monitor
+super + bracket{left,right}
+	bspc desktop -f {prev,next}.local
+
+# focus the last node/desktop
+super + {grave,Tab}
+	bspc {node,desktop} -f last
+
+# focus the older or newer node in the focus history
+#super + {o,i}
+#	bspc wm -h off; \
+#	bspc node {older,newer} -f; \
+#	bspc wm -h on
+
+# focus or send to the given desktop
+super + {_,shift + }{1-9,0}
+	bspc {desktop -f,node -d} '^{1-9,10}'
+
+# Hide/Unhide Window
+#super + p
+#	~/.local/bin/scripts/winhide.sh
+
+# hide window
+super + comma
+    bspc node -g hidden
+
+# unhide window
+super + period
+    ${HOME}/.config/bspwm/bspcmd unhide
+
+#
+# preselect
+#
+
+# preselect the direction
+super + ctrl + {h,j,k,l}
+	bspc node -p {west,south,north,east}
+
+# preselect the ratio
+super + ctrl + {1-9}
+	bspc node -o 0.{1-9}
+
+# cancel the preselection for the focused node
+super + ctrl + space
+	bspc node -p cancel
+
+# cancel the preselection for the focused desktop
+super + ctrl + shift + space
+	bspc query -N -d | xargs -I id -n 1 bspc node id -p cancel
+
+# Close all receptacle
+super + shift + i
+   for win in `bspc query -N -n .leaf.\!window`; do bspc node $win -k ; done;
+
+# Insert receptacle
+super + i; {h,j,k,l}
+   bspc node --presel-dir {west,south,north,east} -i
+
+# Move to rectacle
+super + ctrl + i
+   bspreceptacle
+
+# Balance nodes
+super + alt + i
+   bspc node @/ -B
+
+#
+# move/resize
+#
+
+# Move a floating window or swap with any other adjacent tiled/pseudo_tiled window
+ctrl + alt + {h,j,k,l}
+    { dir=west  dx=-20 dy=0 \
+    , dir=south dx=0   dy=20 \
+    , dir=north dx=0   dy=-20 \
+    , dir=east  dx=20  dy=0 \
+    }; \
+    bspc node --move "$dx" "$dy" || bspc node --swap $dir
+
+#shift + alt + {h,j,k,l}
+shift + alt + {h,j,k,l}
+	bspwm_resize.sh {west,south,north,east}
+
+super + shift + s
+	bspc node -t pseudo_tiled; bspc node -t floating && wtp 340 40 680 700 "$(pfw)"
+
+# floating into similar monocle layout
+super + shift + m
+	bspc node -t pseudo_tiled; bspc node -t floating && wtp 10 40 1342 716 "$(pfw)"
+	#bspc node -t pseudo_tiled; bspc node -t floating && wtp 1 26 1360 735 "$(pfw)"
+
+#super + shift + z
+#	bspc node -t floating && wtp 340 40 680 700 "$(pfw)"
+
+# Spawn next window/program in floating mode
+ctrl + alt + 1
+	bspc rule -a '*' -o state=floating rectangle=680x700+340+40
+# Spawn next window/program in smaller scratchpad like floating mode
+ctrl + alt + 2
+	bspc rule -a '*' -o state=floating rectangle=478x291+656+214
+#super + e : {h,j,k,l}
+#    bspwm_resize.sh expand {west,south,north,east} 50
+#
+#super + shift + e : {h,j,k,l}
+#    bspwm_resize.sh contract {west,south,north,east} 50
+#super + colon
+#	bspc rule -a scratchpad -o state=floating rectangle=680x700+340+40
+# resize floating windows
+#shift + alt + {h,j,k,l}
+#    xdo resize {-w -20,-h +20,-h -20,-w +20}
+# resize floating windows
+#shift + alt + {h,j,k,l}
+#    xdo resize {-w -20,-h +20,-h -20,-w +20}
+
+# resize windows i3 style
+#shift + alt + {h,j,k,l}
+#	;bash ~/.config/sxhkd/resize {x -, y +, y -, x +}
+
+# expand a window by moving one of its side outward
+#alt + shift + {h,j,k,l}
+#	bspc node -z {left -20 0,bottom 0 20,top 0 -20,right 20 0}
+
+# contract a window by moving one of its side inward
+#alt + ctrl + {h,j,k,l}
+#	bspc node -z {right -20 0,top 0 20,bottom 0 -20,left 20 0}
+# expand/contract a window 
+
+#alt + shift + {h,j,k,l}
+#  bspc node -z {left -20 0 || bspc node -z right -20 0, \
+#                bottom 0 20 || bspc node -z top 0 20,\
+#                top 0 -20 || bspc node -z bottom 0 -20,\
+#                right 20 0 || bspc node -z left 20 0}
+
+# move a floating window
+#ctrl + alt + {h,j,k,l}
+#	bspc node -v {-20 0,0 20,0 -20,20 0}
+
+
+# move a floating window
+#super + {Left,Down,Up,Right}
+
+
+
+
+
+
+
+##################################
+#	Control Multimedia		 #
+##################################
+
+#super + {F6,F7,F8}
+#	playerctl {previous,play-pause,next}
+
+{XF86AudioStop,XF86AudioPlay,XF86AudioPrev,XF86AudioNext}
+	playerctl {stop,play-pause,previous,next}
+
+
+# Brightness control
+XF86MonBrightness{Up,Down}
+	brightnessctl s 5%{+,-}
+
+alt + {Up,Down}
+	brightnessctl s 5%{+,-}
+
+
+# Volume control
+XF86Audio{Raise,Lower}Volume
+	pulsemixer --change-volume {+,-}10
+
+alt + {Right,Left}
+	pulsemixer --change-volume {+,-}10
+
+
+
+#####################################
+#   MPC-MPD Multimedia Keybindings  #
+#####################################
+
+super + {XF86AudioPrev,XF86AudioPlay,XF86AudioStop,XF86AudioNext}
+	mpc {prev,toggle,stop,next}
+
+
+# xdotool {{{
+
+# move mouse cursor
+alt + {a,s,w,d,q,e,z,c}
+    xdotool mousemove_relative --sync {-- -24 0, 0 24, -- 0 -24, 24 0, -- -24 -24, -- 24 -24, -- -24 24,-- 24 24}
+
+# move mouse cursor with extra jump size
+ctrl + alt + {a,s,w,d,q,e,z,c}
+    xdotool mousemove_relative --sync {-- -48 0, 0 48, -- 0 -48, 48 0, -- -48 -48, -- 48 -48, -- -48 48,-- 48 48}
+
+# move mouse cursor with lower jump size
+shift + alt + {a,s,w,d,q,e,z,c}
+    xdotool mousemove_relative --sync {-- -8 0, 0 8, -- 0 -8, 8 0, -- -8 -8, -- 8 -8, -- -8 8,-- 8 8}
+
+# emulate left mouse click
+alt + i
+    xdotool click --clearmodifiers 1
+#alt + q
+#    xdotool click --repeat 2 1
+
+# emulate left mouse click select
+alt + shift + i
+    xdotool mousedown 1 sleep 0.5 mousemove_relative --sync {-- -8 0, 0 8, -- 0 -8, 8 0} sleep 0.5 mouseup 1
+
+# emulate mouse scroll button
+alt + p
+    xdotool click --clearmodifiers 2
+
+# emulate mouse right click
+alt + o
+    xdotool click --clearmodifiers 3
+
+# emulate mouse scroll up
+alt + m
+    xdotool click --clearmodifiers 4
+
+# emulate mouse scroll down
+alt + n
+    xdotool click --clearmodifiers 5
+
+# emulate home key
+alt + ctrl + Left
+    xdotool keyup Left key --clearmodifiers Home
+
+# emulate end key
+alt + ctrl + Right
+    xdotool keyup Right key --clearmodifiers End
+
+# emulate delete key
+~alt + BackSpace
+    xte 'keyup Alt_L' 'key Delete' 'keydown Alt_L'
+
+# Emulate home/end keys
+#ctrl + alt + @{Up,Down}
+#    xte 'keyup Control_L' 'keyup Alt_L' 'key {Home,End}'
+
+# Emulate home/end keys with shift
+#ctrl + alt + shift + {k,j}
+#    xte 'keyup Control_L' 'keyup Alt_L' 'key {Home,End}'
+# Emulate delete key
+#super + BackSpace
+#    xdotool key --clearmodifiers Delete
+#super + BackSpace
+#    Delete
+
