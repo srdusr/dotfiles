@@ -34,6 +34,9 @@ super + {equal,minus}
 super + semicolon
 	~/.local/bin/scripts/scratchpad
 
+super + x
+	~/.local/bin/scripts/scratchpad
+
 #{~/.local/bin/scripts/scratchpad, bspc rule -a \* -o state=floating sticky=on floating=on rectangle=680x260+340+460}
 #sid=$(cat /tmp/scratchID);\
 #cid=$(cat /tmp/calcID);\
@@ -82,8 +85,8 @@ alt + x
         -theme-str 'window \{ width: 20em; \}'
 
 # terminal emulator
-#super + Return
-super + x
+super + Return
+#super + x
 	alacritty
 	#urxvt
 	#$TERMINAL
