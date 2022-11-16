@@ -1,0 +1,26 @@
+(defvar appIcons "/usr/share/icons/Papirus-Dark/48x48/apps/")
+(defvar barIcons "/home/sxrdusr/.local/share/icons/feather-icons/")
+
+(defvar disableBorders false)
+(defvar externalMonitor false)
+(defvar focusIsFloaty false)
+(defvar monocleMode false)
+(defvar ultrawide true)
+(defvar brightness 10)
+(defvar nightlight 0)
+(defvar volume 10)
+
+(defpoll date :interval "1m" "date '+%B %d'")
+(defpoll time :interval "2s" "date '+%H:%M'")
+
+(defwidget icon [name ?color ?size]
+  (image
+    :image-width {size?:20}
+    :path "${barIcons}/${color?:'white'}/${name}.svg"
+  )
+)
+
+(include "bar/main.yuck")
+(include "dock/main.yuck")
+(include "panel/main.yuck")
+(include "status/main.yuck")

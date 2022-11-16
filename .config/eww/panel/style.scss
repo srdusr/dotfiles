@@ -1,0 +1,69 @@
+.panel {
+  background-color: $borderColor;
+  padding: $borderSize;
+
+  .button {
+    background-color: $borderColor;
+    border-radius: $borderRadius;
+    margin-left: 10;
+    padding: 8;
+
+    &:first-child {
+      margin-left: 0;
+    }
+  }
+}
+
+.panel-buttons {
+  button {
+    background-color: $borderColor;
+    border-radius: $borderRadius;
+    margin-left: 14;
+    padding: 7 9;
+
+    &:first-child {
+      margin-left: 0;
+    }
+  }
+}
+
+.panel-checkbox {
+  image {
+    margin-right: 10;
+  }
+}
+
+.panel-header {
+  margin-bottom: 14;
+}
+
+.panel-section {
+  background-color: $bgColor;
+  border-radius: $borderRadius;
+  margin-top: $borderSize;
+  padding: 14;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.panel-slider {
+  margin-left: 10;
+
+  trough {
+    background-color: $borderColor;
+    border-radius: 5;
+    min-height: 10px;
+    min-width: 232px;
+
+    highlight {
+      border-radius: 5;
+      background-color: #414868;
+    }
+  }
+}
+
+.panel-wallpaper {
+  border: 3px solid $borderColor;
+}

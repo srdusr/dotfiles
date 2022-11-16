@@ -1,0 +1,142 @@
+(defwindow panel
+  :monitor 0
+  :geometry (geometry :x 28 :y 0 :anchor "center left")
+  (panel))
+
+(defwidget panel []
+  (box
+    :class "panel"
+    :orientation "v"
+    :space-evenly false
+    (panel-audio)
+    (panel-video)
+  )
+)
+
+; Panel Items
+
+(defwidget panel-buttons []
+  (box
+    :class "panel-buttons"
+    :space-evenly false
+    (children)
+  )
+)
+
+(defwidget panel-checkbox [?change text ?value]
+  (button
+    :onclick change
+    (box
+      :class "panel-checkbox"
+      :space-evenly false
+      (icon :name {value ? "check-square" : "square"})
+      text
+    )
+  )
+)
+
+(defwidget panel-slider [icon ?setter ?value]
+  (eventbox
+    ;:onscroll setter
+    (box
+      :space-evenly false
+      (icon :name icon)
+      (scale
+        :class "panel-slider"
+        :min 0
+        :max 11
+        :onchange setter
+        :value value
+      )
+    )
+  )
+)
+
+; Panel Sections
+
+(defwidget panel-section [color icon title]
+  (box
+    :class "panel-section"
+    :orientation "v"
+    :space-evenly false
+    (box
+      :class "panel-header"
+      :spacing 10
+      :space-evenly false
+      (icon :name icon :color color)
+      title
+    )
+    (box
+      :orientation "v"
+      :space-evenly false
+      :spacing 14
+      (children)
+    )
+  )
+)
+
+(defwidget panel-audio []
+  (panel-section
+    :color "green"
+    :icon "sliders"
+    :title "Audio"
+
+    ; audio device
+    (panel-buttons
+      (button :onclick "set-output -a pci-0000_00_1b" "Bar")
+      (button :onclick "set-output -a stereo-game" "Headset")
+      (button :onclick "set-output -a HD3" "Speakers")
+    )
+
+    ; volume slider
+    (panel-slider
+      :icon "volume-2"
+      :setter "set-volume {}"
+      :value volume
+    )
+  )
+)
+
+(defwidget panel-video []
+  (panel-section
+    :color "red"
+    :icon "monitor"
+    :title "Video"
+
+    ; wallpaper setter
+    (eventbox
+      :ondropped "set-wallpaper {}"
+      (button
+        :onclick "quick-app -c Thunar -f \
+          && thunar /home/edwin/.local/share/backgrounds"
+        (image
+          :class "panel-wallpaper"
+          :path "/home/edwin/.config/wallpaper"
+          :image-height 108
+          :image-width 256
+        )
+      )
+    )
+
+    ; brightness slider
+    (panel-slider
+      :icon "sun"
+      :setter "set-brightness {}"
+      :value brightness
+    )
+
+    ; external monitor
+    (panel-checkbox
+      :change "set-output -e ${!externalMonitor}"
+      :text "External Monitor"
+      :value externalMonitor
+    )
+
+    ; ultrawide resolution
+    (panel-checkbox
+      :change "set-output -u ${!ultrawide}"
+      :text "Ultrawide Resolution"
+      :value ultrawide
+    )
+  )
+)
