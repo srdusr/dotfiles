@@ -1,0 +1,819 @@
+;==========================================================
+;
+;
+;   ██████╗  ██████╗ ██╗  ██╗   ██╗██████╗  █████╗ ██████╗
+;   ██╔══██╗██╔═══██╗██║  ╚██╗ ██╔╝██╔══██╗██╔══██╗██╔══██╗
+;   ██████╔╝██║   ██║██║   ╚████╔╝ ██████╔╝███████║██████╔╝
+;   ██╔═══╝ ██║   ██║██║    ╚██╔╝  ██╔══██╗██╔══██║██╔══██╗
+;   ██║     ╚██████╔╝███████╗██║   ██████╔╝██║  ██║██║  ██║
+;   ╚═╝      ╚═════╝ ╚══════╝╚═╝   ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
+;
+;
+;   To learn more about how to configure Polybar
+;   go to https://github.com/polybar/polybar
+;
+;   The README contains a lot of information
+;
+;==========================================================
+
+[colors]
+background           = #aa000000
+;background           = #aa101212
+;background           = #00000000
+background-alt       = #aaCECCC9
+;foreground           = #aaCECCC9
+foreground           = #fafafa
+foreground-alt       = #aaCECCC9
+primary              = #aaCECCC9
+secondary            = #aaCECCC9
+alert                = #aaCECCC9
+non                  = #aaCECCC9
+;background = #aa000000
+blue = #61afef
+dark_blue = #42A5F5
+nord = #81a1c1
+light_blue = #ADD8E6
+;green = #a0c980
+purple = #c882e7
+orange = #E57C46
+;orange = #d08770
+gray = #676E95
+red = #EC7875
+pink = #EC407A
+yellow = #FDD835
+;yellow = #ECBE7B
+amber = #FBC02D
+indigo = #6C77BB
+green = #61C766
+lime = #B9C244
+cyber = #53E2AE
+
+[bar/top]
+;width = 100%
+width = 99.15%
+height = 24
+offset-x = 0.5%
+offset-y = 0.5%
+radius = 10.0
+;radius = 0
+fixed-center = true
+bottom = false
+enable-ipc = true
+tray-position = right
+tray-padding = 4
+tray-background = ${colors.background}
+;tray-offest-x = -15
+;tray-offset-x = 400
+;tray-offset-x = -95
+;tray-offset-x = -208
+;tray-offset-x = -178
+;tray-offset-x = -183
+tray-offset-x = -188
+;tray-offset-x = -210
+tray-offset-y = -0.9
+tray-detached = true
+
+background = ${colors.background}
+foreground = ${colors.foreground}
+
+line-size = 0
+line-color = ${colors.background-alt}
+
+;border-top-size = 1
+;border-bottom-size = 1
+;border-right-size = 1
+;border-left-size = 1
+;border-color = ${colors.foreground}
+;border-size = 2
+;border-color = ${colors.background}
+
+padding-left = 0
+padding-right = 0
+
+module-margin-left = 0
+module-margin-right = 0
+; Font for date
+font-0 = "SF Pro Mono:style=Display Bold:size=10;2" 
+; Font for crypto, dunst
+font-1 = "Material Design Icons:style=Bold:size=11.5;2"
+; Font for menu
+font-2 = "Material Design Icons:style=Bold:size=13.5;2"
+; Font for controlCenter
+font-3 = "SF Pro:style=Medium:size=10.5;2"
+; Font for search 
+font-4 = "SF Pro:style=Medium:size=9.5;2"
+; Font for bspwm/workspaces
+font-5 = "UbuntuMono Nerd font:size=11;2"
+
+modules-left = sep menu sep close sep minimize sep maximize sep
+modules-center = bspwm
+modules-right = dunst search control date sep
+
+;modules-left = sep menu
+;modules-center = date
+;modules-right = bspwm whitespace crypto dunst search control space
+
+;modules-right =  crypto dunst search date sep powermenu sep
+;modules-right = crypto toggle_spotify volume backlight battery network notification powermenu
+
+wm-restack = bspwm
+;wm-restack = bspwm
+
+override-redirect = true
+
+;; scroll-up = bspwm-desknext
+;; scroll-down = bspwm-deskprev
+
+;scroll-up = i3wm-wsnext
+;scroll-down = i3wm-wsprev
+
+cursor-click = pointer
+cursor-scroll = ns-resize
+
+[module/menu]
+type = custom/text
+content = 󰣇
+content-font = 3
+content-padding = 1
+content-foreground = ${colors.foreground}
+click-left = ~/.config/polybar/scripts/menu.sh
+click-right = ~/.config/polybar/scripts/menu_full.sh
+
+[module/bspwm]
+type = internal/bspwm
+format = <label-state>
+;format = <label-state> <label-mode> 
+format-padding = 0
+;format-padding-right = 2
+format-foreground = ${colors.foreground}
+index-sort = true
+enable-click = true
+reverse-scroll = true
+#reverse-scroll = false
+
+label-focused = 
+label-focused-padding = 2
+
+label-occupied = 
+label-occupied-padding = 2
+
+label-empty = 
+label-empty-padding = 2
+
+
+[module/sepp]
+type = custom/text
+content = " "
+
+
+[module/close]
+type = custom/text
+content-foreground = ${colors.red}
+content-padding = 1
+content = 
+click-left = "xdotool getwindowfocus windowkill"
+
+[module/minimize]
+type = custom/text
+content-foreground = ${colors.yellow}
+content-padding = 1
+content = 
+click-left = bspc node -g hidden
+click-right = ${HOME}/.config/bspwm/bspcmd unhide
+
+;label = 
+[module/maximize]
+type = custom/text
+content-foreground = ${colors.green}
+content-padding = 1
+content = 
+;click-left = bspc node -t {fullscreen}
+click-left = bspc node -t ~floating
+click-right = bspc desktop -l next
+#bspc node -t \~{fullscreen};
+
+[module/blur-toggle]
+type = custom/ipc
+hook-0 = echo 
+hook-1 = echo 
+click-left = ~/.local/bin/scripts/blurtoggle.sh
+initial = 1
+format-foreground = ${colors.foreground}
+
+
+[module/battery]
+type = internal/battery
+full-t = 99
+time-format = %H:%M
+battery = BAT1
+adapter = ACAD
+format-padding = 1
+format-charging = <animation-charging> <label-charging>
+format-charging-background =
+label-charging = %percentage%%
+format-discharging = <ramp-capacity> <label-discharging>
+format-discharging-background =
+label-discharging = %percentage%%
+format-full = <label-full>
+format-full-prefix = " "
+format-full-prefix-foreground = ${colors.green}
+;format-foreground = ${colors.green}
+ramp-capacity-0 = 
+ramp-capacity-1 = 
+ramp-capacity-2 = 
+ramp-capacity-3 = 
+ramp-capacity-4 = 
+ramp-capacity-5 = 
+ramp-capacity-6 = 
+ramp-capacity-7 = 
+ramp-capacity-8 = 
+ramp-capacity-9 = 
+
+ramp-capacity-0-foreground = ${colors.red}
+ramp-capacity-1-foreground = ${colors.red}
+ramp-capacity-foreground   = ${colors.green}
+;ramp-capacity-foreground   = ${colors.foreground}
+bar-capacity-width = 10
+
+animation-charging-0 = 
+animation-charging-1 = 
+animation-charging-2 = 
+animation-charging-3 = 
+animation-charging-4 = 
+animation-charging-5 = 
+animation-charging-6 = 
+animation-charging-foreground = ${colors.green}
+
+animation-charging-framerate = 750
+
+[module/xbacklight]
+type = internal/xbacklight
+enable-scroll = true
+
+[module/backlight]
+inherit = module/xbacklight
+type = internal/backlight
+card = intel_backlight
+format-backlight = <ramp-backlight> <label>
+format-padding = 1
+format-prefix = "  "
+format-prefix-foreground = ${colors.indigo}
+label = %percentage%%
+label-foreground = ${colors.foreground}
+
+[module/bluetooth]
+type = custom/script
+exec = ~/.config/polybar/scripts/bluetooth.sh
+tail = true
+click-left = exec blueberry &
+click-right = exec $HOME/.config/polybar/scripts/toggle_bluetooth.sh
+
+[module/network]
+type = custom/script
+exec = ~/.config/polybar/scripts/check-network.sh
+format-background =
+format-foreground = ${colors.light_blue}
+click-left = networkmanager_dmenu &
+click-right = nm-applet
+tail = true
+format-padding = 1
+
+
+;[module/date]
+;type = internal/date
+;interval = 30
+;label =  %time%
+;label-padding = 2
+;label-background =
+;time =  %H:%M
+;time-alt =  %Y-%m-%d
+
+[module/date]
+type = internal/date
+interval = 1
+label = %date%, %time%
+label-padding = 2.5
+label-background =
+date = %a %d %b
+time = %H:%M
+
+;[module/powermenu]
+;type = custom/text
+;content = 󰐥
+;;content = 襤
+;content-foreground = ${colors.red}
+;content-padding = 1
+;label-margin = 3
+;click-left = ~/.config/polybar/scripts/sysmenu.sh
+;click-right = ~/.config/polybar/scripts/sysmenu.sh
+
+[module/control]
+type = custom/text
+content = 􀜊
+;content = 襤
+content-foreground = ${colors.foreground}
+content-padding = 1
+label-margin = 10
+click-left = ~/.config/polybar/scripts/sysmenu.sh
+click-right = ~/.config/polybar/scripts/sysmenu.sh
+
+
+;[module/title]
+;type = internal/xwindow
+;; Available tags:
+;;   <label> (default)
+;format = <label>
+;format-background = ${colors.background}
+;format-foreground = ${colors.foreground}
+;format-padding = 1
+;label-maxlen = 10
+;label-empty = " "
+
+
+;[module/bspwm]
+;type = internal/bspwm
+;format = <label-state>
+;;format = <label-state> <label-mode> 
+;format-padding = 1
+;format-foreground = ${colors.foreground}
+;index-sort = true
+;enable-click = true
+;reverse-scroll = true
+;#reverse-scroll = false
+;
+;label-focused = 
+;label-focused-padding = 2
+;
+;label-occupied = 
+;label-occupied-padding = 2
+;
+;label-empty = 
+;label-empty-padding = 2
+;
+;label-monocle = "    "
+;label-tiled = "  "
+;label-fullscreen = "   "
+;label-floating = "     "
+;label-pseudotiled = "  "
+;label-locked = "   "
+;;label-sticky = "  "
+;label-private =  " 󱁘  "
+
+; Separator in between workspaces
+;label-separator = |
+;label-separator-padding = 10
+;label-separator-foreground = #ffb52a
+[module/search]
+type = custom/text
+content = "􀊫"
+; hack nerd
+content-padding = 1
+content-font = 5
+;content-padding-right = 5
+content-foreground = ${colors.foreground}
+click-left = rofi -show drun
+;click-left = ~/.config/polybar/scripts/menu.sh
+
+
+
+[module/crypto]
+type = custom/script
+exec = echo 󰅸
+format = <label>
+format-padding = 1
+label-padding = 
+content-background =
+format-foreground = ${colors.foreground}
+interval = 60
+click-left = cryptonotify
+click-right = $TERMINAL -e cointop &
+
+[module/now-playing]
+type = custom/script
+tail = true
+;format-prefix = ""
+format = <label>
+exec = ~/.config/polybar/scripts/now-playing.sh
+click-right = "kill -USR1 $(pgrep --oldest --parent %pid%)"
+
+
+[module/sep]
+type = custom/text
+content = " "
+
+[module/space]
+type = custom/text
+content = "   "
+
+[module/whitespace]
+type = custom/text
+content = "                                                  "
+
+;[module/xwindow]
+;type = internal/xwindow
+;label = %title:0:30:...%
+;format-foreground = ${colors.foreground}
+;format-padding = 4
+
+[module/arch]
+typ = custom/text
+content = "   "
+format-foreground = ${colors.foreground}
+format-padding = 4
+
+
+
+[module/workspaces]
+type = internal/xworkspaces
+pin-workspaces = true
+enable-click = true
+enable-scroll = true
+format-padding = 1
+
+icon-default = 
+
+format = <label-state>
+format-background = ${colors.bg1}
+label-active = "  "
+label-occupied = "  "
+label-urgent = "  "
+label-empty = "  "
+
+label-empty-padding = 1
+label-active-padding = 1
+label-urgent-padding = 1
+label-occupied-padding = 1
+
+label-empty-foreground = ${colors.foreground}
+label-active-foreground = ${colors.acolor}
+label-urgent-foreground = ${colors.curgent}
+label-occupied-foreground = ${colors.foreground}
+
+
+[module/previous]
+type = custom/ipc
+format-padding = 1
+; Default
+hook-0 = echo ""
+; When spotify active
+hook-1 = echo "󰒮 "
+click-left = "spotifyctl -q previous"
+
+
+[module/next]
+type = custom/ipc
+format-padding = 1
+; Default
+hook-0 = echo ""
+; When spotify active
+hook-1 = echo " 󰒭             "
+click-left = "spotifyctl -q next"
+
+
+[module/playpause]
+type = custom/ipc
+; Default
+hook-0 = echo ""
+; Playing
+hook-1 = echo ""
+; Paused
+hook-2 = echo ""
+click-left = "spotifyctl -q playpause"
+
+
+[module/spotify]
+type = custom/ipc
+format-padding = 0.5
+; Default
+hook-0 = echo ""
+; Playing/paused show song name and artist
+;hook-1 = spotifyctl -q status --format ' %artist% %title%' --max-title-length 10 --max-artist-length 5 --trunc ''
+hook-1 = spotifyctl status --format ' %artist%: %title%' --max-artist-length 15 --max-title-length 15 --trunc '...'
+;hook-1 = spotifyctl -q status --format '%artist%~ %title%' --max-length 20
+
+[module/toggle_spotify]
+type = custom/text
+content = "  "
+content-padding = 1
+content-foreground = ${colors.pink}
+click-left = spotify
+click-right = spotify
+
+[module/cmus]
+type = custom/script
+
+exec = ~/.config/polybar/scripts/cmus.sh
+exec-if = pgrep -x cmus
+interval = 1
+
+click-left = cmus-remote --next
+click-right = cmus-remote --prev
+click-middle = cmus-remote --pause
+scroll-up = cmus-remote --volume +5%
+scroll-down = cmus-remote --volume -5%
+
+label-font = 1
+format = <label>
+format-underline = ${colors.foreground-alt}
+label = %output%
+label-maxlen = 50
+
+[module/notification]
+type = custom/text
+content = 
+content-padding = 0
+content-foreground = ${colors.foreground-alt}
+click-left = sh rofi_notif_center.sh
+click-right = sh rofi_notif_center.sh
+
+[module/dunst]
+type = custom/text
+content-foreground = ${colors.foreground}
+content-padding = 1
+content = 󰂜
+click-left = "dunstctl history-pop"
+
+[module/popup-calendar]
+type = custom/script
+exec = ~/.config/polybar/scripts/popup-calendar.sh
+interval = 5
+click-left = ~/.config/polybar/scripts/popup-calendar.sh --popup &
+
+;[module/dunst]
+;type = custom/ipc
+;initial = 1
+;format-foreground = ${colors.foreground}
+;hook-0 = echo "%{A1:notify-send dunstctl && polybar-msg hook dunst 2:}%{A}" &
+;hook-1 = echo "%{A1:notify-send dunstctl && polybar-msg hook dunst 1:}%{A}" &
+
+[module/eww]
+type = custom/text
+content = 
+content-padding = 0
+content-foreground = #d8dee9
+click-left = sh toggle_eww.sh
+click-right = sh toggle_eww.sh
+
+[module/pulseaudio]
+type = internal/pulseaudio
+ramp-volume-foreground = #8959a8
+format-volume-padding = 0
+format-volume-margin = 0
+format-volume = <ramp-volume>
+use-ui-max = true
+interval = 5
+
+ramp-volume-0 = " "
+ramp-volume-1 = " "
+ramp-volume-2 = " "
+
+
+label-muted = 
+label-muted-background = #3e999f
+format-muted-foreground = #3e999f
+format-muted-overline = #3e999f
+format-muted-margin = 2
+format-muted-padding = 2
+
+[module/volume]
+type = internal/pulseaudio
+format-volume = <ramp-volume> <label-volume>
+format-volume-font = 10
+format-volume-padding = 0
+;ramp-volume-foreground = ${colors.foreground}
+label-volume = %percentage%%
+label-volume-padding = 0
+;label-muted-foreground = ${colors.foreground}
+;format-volume-foreground = ${colors.purple}
+format-muted-foreground = ${colors.red}
+format-muted-underline = ${colors.red}
+ramp-volume-foreground   = ${colors.purple}
+label-muted = "婢  "
+ramp-volume-0 = ""
+ramp-volume-1 = ""
+ramp-volume-2 = ""
+ramp-volume-3 = ""
+ramp-volume-4 = ""
+ramp-volume-5 = ""
+ramp-volume-6 = ""
+
+
+[module/xkeyboard]
+type = internal/xkeyboard
+blacklist-0 = num lock
+
+format-prefix = 
+format-foreground = ${colors.foreground-alt}
+label-layout = " %layout%"
+
+label-indicator-foreground = ${colors.alert}
+label-indicator-padding = 2
+
+[module/filesystem]
+type = internal/fs
+interval = 25
+
+mount-0 = /
+
+format-mounted = <label-mounted>
+format-mounted-foreground = #b48ead
+format-mounted-prefix = " "
+label-mounted =  " %free%"
+
+format-unmounted = <label-unmounted>
+format-unmounted-prefix =
+label-unmounted = %mountpoint%: not mounted
+
+[module/updates]
+type = custom/script
+exec = xbps-updates
+format = <label>
+interval = 4600
+label =  %output%
+label-padding = 2
+label-foreground =  #81A1C1
+
+
+[module/cpu]
+type = internal/cpu
+interval = 2
+format-prefix = " "
+format-prefix-foreground = #b48ead
+label = %percentage:2%%
+
+
+[module/memory]
+type = internal/memory
+interval = 2
+format-prefix = " "
+format-prefix-foreground = #5e81ac
+label = %percentage_used%%
+
+[module/globalmenu]
+type = custom/script
+exec = ~/.config/polybar/globalmenu.sh
+format = <label>
+label = %output%
+;type = custom/ipc
+;hook-0 = xfce4-panel | sed -e 's/^"//' -e 's/"$//'
+;;exec = awk /usr/bin/xfce4-panel
+;initial = 1
+;format-underline = ${colors.cyber}
+;format-padding = 1
+
+[module/global]
+type = custom/script
+exec = ~/.config/polybar/globaldmenu
+label = %output%
+
+[settings]
+screenchange-reload = true
+;compositing-background = xor
+;compositing-background = screen
+;compositing-foreground = source
+;compositing-border = over
+;pseudo-transparency = false
+
+[global/wm]
+margin-top = 0
+margin-bottom = 0
+
+[module/options_open]
+type = custom/text
+content-foreground = ${colors.foreground}
+content = ""
+click-left = ~/.config/polybar/scripts/polybar_wrapper options
+
+[module/options_close]
+type = custom/text
+content-foreground = ${colors.primary}
+content = ""
+click-left = ~/.config/polybar/scripts/polybar_wrapper options
+
+;[bar/bottom]
+;width = 8%
+;height = 15
+;offset-x = 46%
+;;offset-x = 35%
+;;offset-x = 0.5%
+;offset-y = 2.5%
+;radius = 7.0
+;fixed-center = true
+;bottom = false
+;enable-ipc = true
+;;tray-offset-x = 515
+;;tray-detached = true
+;
+;background = ${colors.background}
+;foreground = ${colors.foreground}
+;
+;line-size = 0
+;line-color = ${colors.background-alt}
+;
+;;border-top-size = 1
+;;border-bottom-size = 1
+;;border-right-size = 1
+;;border-left-size = 1
+;;border-color = ${colors.foreground}
+;;border-size = 2
+;;border-color = ${colors.background}
+;
+;padding-left = 0
+;padding-right = 0
+;
+;module-margin-left = 0
+;module-margin-right = 0
+;; Font for date
+;font-0 = "SF Pro Mono:style=Display Bold:size=10;2" 
+;; Font for bspwm/workspaces
+;font-1 = "UbuntuMono Nerd font:size=10.5;2"
+;; Font for crypto, dunst
+;font-2 = "Material Design Icons:style=Bold:size=11;3"
+;; Font for menu
+;font-3 = "Material Design Icons:style=Bold:size=14;5"
+;; Font for search and controlCenter
+;font-4 = "SF Pro:style=Medium:size=10.5;3"
+;
+;modules-center = bspwm sepp
+;
+;;wm-restack = bspwm
+;
+;override-redirect = true
+;
+;;; scroll-up = bspwm-desknext
+;;; scroll-down = bspwm-deskprev
+;
+;;scroll-up = i3wm-wsnext
+;;scroll-down = i3wm-wsprev
+;
+;cursor-click = pointer
+;cursor-scroll = ns-resize
+;
+;
+;[bar/left]
+;width = 5%
+;height = 15
+;offset-x = 2.5%
+;;offset-x = 35%
+;;offset-x = 0.5%
+;offset-y = 2.5%
+;radius = 7.0
+;fixed-center = true
+;bottom = false
+;enable-ipc = true
+;;tray-offset-x = 515
+;;tray-detached = true
+;
+;background = ${colors.background}
+;foreground = ${colors.foreground}
+;
+;line-size = 0
+;line-color = ${colors.background-alt}
+;
+;;border-top-size = 1
+;;border-bottom-size = 1
+;;border-right-size = 1
+;;border-left-size = 1
+;;border-color = ${colors.foreground}
+;;border-size = 2
+;;border-color = ${colors.background}
+;
+;padding-left = 0
+;padding-right = 0
+;
+;module-margin-left = 0
+;module-margin-right = 0
+;; Font for date
+;font-0 = "SF Pro Mono:style=Display Bold:size=10;2" 
+;; Font for bspwm/workspaces
+;font-1 = "UbuntuMono Nerd font:size=11.5;2"
+;; Font for crypto, dunst
+;font-2 = "Material Design Icons:style=Bold:size=11;3"
+;; Font for menu
+;font-3 = "Material Design Icons:style=Bold:size=14;5"
+;; Font for search and controlCenter
+;font-4 = "SF Pro:style=Medium:size=10.5;3"
+;
+;modules-left = close blank minimize blank maximize blank
+;
+;;wm-restack = bspwm
+;
+;override-redirect = true
+;
+;;; scroll-up = bspwm-desknext
+;;; scroll-down = bspwm-deskprev
+;
+;;scroll-up = i3wm-wsnext
+;;scroll-down = i3wm-wsprev
+;
+;cursor-click = pointer
+;cursor-scroll = ns-resize
+;
+;;[module/decorations]
+;;type = custom/text
+;
+;[module/blank]
+;type = custom/text
+;content = "  "
+
+; vim:ft=dosini
