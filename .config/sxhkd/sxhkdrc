@@ -487,4 +487,3 @@ alt + ctrl + Right
 #    xdotool key --clearmodifiers Delete
 #super + BackSpace
 #    Delete
-
