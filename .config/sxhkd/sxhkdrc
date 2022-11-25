@@ -385,9 +385,9 @@ ctrl + alt + 2
 super + shift + {h,j,k,l}
 	/path/to/bspwm_smart_move {west,south,north,east}
 
-
-
-
+# rotate windows to different nodes
+super + ctrl + r
+  bspc node @parent -R 90
 
 ##################################
 #	Control Multimedia		 #
