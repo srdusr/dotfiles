@@ -381,7 +381,9 @@ ctrl + alt + 2
 # move a floating window
 #super + {Left,Down,Up,Right}
 
-
+# move a tiled window to any direction
+super + shift + {h,j,k,l}
+	/path/to/bspwm_smart_move {west,south,north,east}
 
 
 
