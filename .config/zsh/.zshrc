@@ -228,9 +228,11 @@ bindkey "^W" backward-kill-word
 bindkey "^H" backward-delete-char      # Control-h also deletes the previous char
 bindkey "^U" backward-kill-line
 
-autoload -U edit-command-line
-zle -N edit-command-line
+
+# Edit line in vim with alt-e
+autoload edit-command-line; zle -N edit-command-line
 bindkey '^e' edit-command-line
+#bindkey '^[e' edit-command-line # alt + e
 
 ##########    Useful Commands/Alias    ##########
 
@@ -323,19 +325,25 @@ nnn() {
 alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
 alias vi='nvim'
 alias nv='nvim'
+alias trash="gio trash"
+alias trash_restore='gio trash --restore "$(gio trash --list | fzf | cut -f 1)"'
 
 ##########    Source Plugins, should be last    ##########
 
 # load zsh-vi-mode
 #source /usr/share/zsh/plugins/zsh-vi-mode/zsh-vi-mode.plugin.zsh
+
 # Load zsh-syntax-highlighting
 source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh 2>/dev/null
+
 # Load fzf keybindings and completion
 source /usr/share/fzf/key-bindings.zsh
 source /usr/share/fzf/completion.zsh
 source /usr/share/fzf-marks/fzf-marks.plugin.zsh 2>/dev/null
+
 # Suggest aliases for commands
 source /usr/share/zsh/plugins/zsh-you-should-use/you-should-use.plugin.zsh 2>/dev/null
+
 # Load fish like auto suggestions
 source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh
 source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
