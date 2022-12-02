@@ -340,13 +340,17 @@ alias nv='nvim'
 alias trash="gio trash"
 alias trash_restore='gio trash --restore "$(gio trash --list | fzf | cut -f 1)"'
 alias ec='$EDITOR $HOME/.config/zsh/.zshrc'
-alias sc="source $HOME/.zshrc"
+alias sc="source $HOME/.config/zsh/.zshrc"
 
 # confirmation #
 alias mv='mv -i'
 alias cp='cp -i'
 alias ln='ln -i'
 alias rm='rm -i'
+
+# suspend(sleep)/hibernate and lock screen if using systemctl
+alias suspend='systemctl suspend | betterlockscreen --lock dimblur'
+alias hibernate='systemctl hibernate | betterlockscreen --lock dimblur'
 
 ##########    Source Plugins, should be last    ##########
 
