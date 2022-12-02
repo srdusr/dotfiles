@@ -331,6 +331,9 @@ alias vi='nvim'
 alias nv='nvim'
 alias trash="gio trash"
 alias trash_restore='gio trash --restore "$(gio trash --list | fzf | cut -f 1)"'
+alias ec='$EDITOR $HOME/.config/zsh/.zshrc'
+alias sc="source $HOME/.zshrc"
+
 
 ##########    Source Plugins, should be last    ##########
 
