@@ -342,6 +342,11 @@ alias trash_restore='gio trash --restore "$(gio trash --list | fzf | cut -f 1)"'
 alias ec='$EDITOR $HOME/.config/zsh/.zshrc'
 alias sc="source $HOME/.zshrc"
 
+# confirmation #
+alias mv='mv -i'
+alias cp='cp -i'
+alias ln='ln -i'
+alias rm='rm -i'
 
 ##########    Source Plugins, should be last    ##########
 
