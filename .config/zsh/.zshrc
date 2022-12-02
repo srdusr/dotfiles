@@ -349,8 +349,8 @@ alias ln='ln -i'
 alias rm='rm -i'
 
 # suspend(sleep)/hibernate and lock screen if using systemctl
-alias suspend='systemctl suspend | betterlockscreen --lock dimblur'
-alias hibernate='systemctl hibernate | betterlockscreen --lock dimblur'
+alias suspend='systemctl suspend && betterlockscreen --lock dimblur'
+alias hibernate='systemctl hibernate'
 
 ##########    Source Plugins, should be last    ##########
 
