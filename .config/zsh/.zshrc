@@ -236,8 +236,8 @@ bindkey "^W" backward-kill-word
 bindkey "^H" backward-delete-char      # Control-h also deletes the previous char
 bindkey "^U" backward-kill-line
 
-bindkey "^N" history-search-forward # or you can bind it to the down key "^[[B"
-bindkey "^P" history-search-backward # or you can bind it to Up key "^[[A"
+bindkey "^[j" history-search-forward # or you can bind it to the down key "^[[B"
+bindkey "^[k" history-search-backward # or you can bind it to Up key "^[[A"
 bindkey '^X' autosuggest-execute
 bindkey '^Y' autosuggest-accept
 
