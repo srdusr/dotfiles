@@ -399,6 +399,9 @@ super + ctrl + r
 {XF86AudioStop,XF86AudioPlay,XF86AudioPrev,XF86AudioNext}
 	playerctl {stop,play-pause,previous,next}
 
+alt + shift + {Left,Up,Right}
+	playerctl {previous,play-pause,next}
+
 
 # Brightness control
 XF86MonBrightness{Up,Down}
