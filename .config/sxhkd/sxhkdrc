@@ -484,11 +484,3 @@ alt + ctrl + Right
 #ctrl + alt + @{Up,Down}
 #    xte 'keyup Control_L' 'keyup Alt_L' 'key {Home,End}'
 
-# Emulate home/end keys with shift
-#ctrl + alt + shift + {k,j}
-#    xte 'keyup Control_L' 'keyup Alt_L' 'key {Home,End}'
-# Emulate delete key
-#super + BackSpace
-#    xdotool key --clearmodifiers Delete
-#super + BackSpace
-#    Delete
