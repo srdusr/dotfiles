@@ -23,9 +23,9 @@ control_chars = ['','','','']
 # else default key value.
 # example:
 display_player_prefix = {
-    "spotify":  '',
-    "firefox":  '',
-    "default":  ''
+    "spotify":  '     ',
+    "firefox":  '     ',
+    "default":  '     '
 }
 
 # (list) : list of metadata fields based on mpris sepecification.
@@ -44,7 +44,7 @@ player_names = None
 players = None
 message = None
 display_text = ""
-display_prefix = ""
+display_prefix = " "
 display_suffix = ""
 last_player_name = None
 
