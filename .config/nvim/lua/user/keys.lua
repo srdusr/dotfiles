@@ -313,7 +313,7 @@ map("n", "<leader>fh", "<cmd>lua require('telescope.builtin').help_tags()<cr>")
 --    desc = "Search all files",
 --    <cmd>Telescope find_files hidden=true<cr>
 --map("n", "<leader>fh", "<cme>lua require('telecsope.builtin').file_files hidden=true<cr>")
-map("n", "<leader>fF", function() require("telescope.builtin").find_files { hidden = true, no_ignore = true } end)
+map("n", "<leader>ff", function() require("telescope.builtin").find_files { hidden = true, no_ignore = true } end)
 --map("n", "<leader>fe", ":lua require('telescope.builtin').file_browser({cwd = '.'})<CR>")
 map("n", "<leader>fg", "<cmd>lua require('telescope.builtin').live_grep()<cr>")
 map("n", "<leader>fb", "<cmd>lua require('telescope.builtin').current_buffer_fuzzy_find()<cr>")
@@ -505,7 +505,7 @@ vim.cmd([[
 ---- Open the current file in the default program (on Mac this should just be just `open`)
 --keymap('n', '<leader>x', ':!xdg-open %<cr><cr>')
 
-map("n", "<leader>ff", "<cmd>lua require('telescope.builtin').find_files()<cr>")
+map("n", "<leader>fF", "<cmd>lua require('telescope.builtin').find_files()<cr>")
 --keymap("n", "<leader>ff", "<cmd>lua require('telescope.builtin').find_files cwd=..()<cr>")
 --keymap('n', '<leader>k', ':nohlsearch<CR>')
 --
