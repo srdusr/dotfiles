@@ -335,6 +335,42 @@ nnn() {
 #bindkey -s '^f' 'cd "$(dirname "$(fzf)")"\n'
 
 alias config='/usr/bin/git --git-dir=$HOME/.cfg/ --work-tree=$HOME'
+#alias cfg='config subtree pull --prefx'
+#alias gsp="git subtree push --prefix=_site git@github.com:mertnuhoglu/blog_datascience.git"
+#alias gsp="git subtree push.local/bin/scripts https://github.com/srdusr/scripts.git main --squash
+function gsp
+{
+    # Config file for subtrees
+    #
+    # Format:
+    # <prefix>;<remote address>;<remote branch>
+    # # Lines starting with '#' will be ignored
+    GIT_SUBTREE_FILE="$PWD/.gitsubtrees"
+
+    if [ ! -f $GIT_SUBTREE_FILE ]; then
+        echo "Nothing to do - file <`basename $GIT_SUBTREE_FILE`> does not exist."
+        return
+    fi
+
+    OLD_IFS=$IFS
+    IFS=$'\n'
+    for LINE in $(cat $GIT_SUBTREE_FILE); do
+
+        # Skip lines starting with '#'.
+        if [[ $LINE = \#* ]]; then
+            continue
+        fi
+
+        # Parse the current line.
+        PREFIX=`echo $LINE | cut -d';' -f 1`
+        REMOTE=`echo $LINE | cut -d';' -f 2`
+        BRANCH=`echo $LINE | cut -d';' -f 3`
+
+        # Push to the remote.
+        echo "config subtree pull --prefix=$PREFIX $REMOTE $BRANCH"
+        config subtree pull --prefix=$PREFIX $REMOTE $BRANCH
+    done
+}
 alias vi='nvim'
 alias nv='nvim'
 alias trash="gio trash"
