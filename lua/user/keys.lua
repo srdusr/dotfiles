@@ -26,7 +26,7 @@ vim.g.mapleader = ";"
 --vim.g.maplocalleader = ";"
 
 -- "jj" to exit insert-mode
-map("i", "jk", "<esc>")
+map("i", "jj", "<esc>")
 
 map("n", "<leader>m", ":messages<CR>")
 map("n", "<leader>cd", ":cd %:p:h<CR>:pwd<CR>")
