@@ -350,7 +350,8 @@ return packer.startup(function(use)
 	use({
 	  "ggandor/leap.nvim",
 	  config = function()
-	    require("leap").set_default_keymaps()
+      require('leap').add_default_mappings()
+	    --require("leap").set_default_keymaps()
       --vim.keymap.set('n', '-', '<Plug>(leap-forward)', {})
       --vim.keymap.set('n', '_', '<Plug>(leap-backward)', {})
 	  end,
