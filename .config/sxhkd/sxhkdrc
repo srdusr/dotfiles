@@ -298,67 +298,6 @@ alt + {Right,Left}
 
 #---------------------------------------------------------------
 #
-#	Xdotool
-#
-
-# Move mouse cursor
-alt + {a,s,w,d,a; w,w; d,a; s,s; d}
-    xdotool mousemove_relative --sync {-- -24 0, 0 24, -- 0 -24, 24 0, -- -24 -24, -- 24 -24, -- -24 24,-- 24 24}
-
-# Move mouse cursor with extra jump size
-shift + alt + {a;w,w;d,a;s,s;d}
-    xdotool mousemove_relative --sync {-- -48 -48, -- 48 -48, -- -48 48,-- 48 48}
-#ctrl + alt + {a,s,w,d,q,e,z,c}
-    #xdotool mousemove_relative --sync {-- -48 0, 0 48, -- 0 -48, 48 0, -- -48 -48, -- 48 -48, -- -48 48,-- 48 48}
-
-# Move mouse cursor with lower jump size
-#shift + alt + {a,s,w,d,q,e,z,c}
-    #xdotool mousemove_relative --sync {-- -8 0, 0 8, -- 0 -8, 8 0, -- -8 -8, -- 8 -8, -- -8 8,-- 8 8}
-
-# Emulate left mouse click
-alt + i
-    xdotool click --clearmodifiers 1
-#alt + q
-#    xdotool click --repeat 2 1
-
-# Emulate left mouse click select
-alt + shift + i
-    xdotool mousedown 1 sleep 0.5 mousemove_relative --sync {-- -8 0, 0 8, -- 0 -8, 8 0} sleep 0.5 mouseup 1
-
-# Emulate mouse scroll button
-alt + p
-    xdotool click --clearmodifiers 2
-
-# Emulate mouse right click
-alt + o
-    xdotool click --clearmodifiers 3
-
-# Emulate mouse scroll up
-alt + m
-    xdotool click --clearmodifiers 4
-
-# Emulate mouse scroll down
-alt + n
-    xdotool click --clearmodifiers 5
-
-# Emulate home key
-alt + ctrl + Left
-    xdotool keyup Left key --clearmodifiers Home
-
-# Emulate end key
-alt + ctrl + Right
-    xdotool keyup Right key --clearmodifiers End
-
-# Emulate delete key
-~alt + BackSpace
-    xte 'keyup Alt_L' 'key Delete' 'keydown Alt_L'
-
-# Emulate home/end keys
-#ctrl + alt + @{Up,Down}
-#    xte 'keyup Control_L' 'keyup Alt_L' 'key {Home,End}'
-
-#---------------------------------------------------------------
-#
 # Programs
 #
 
