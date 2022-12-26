@@ -1,13 +1,24 @@
 --[[ opts.lua ]]
+-- " Load indent files, to automatically do language-dependent indenting.
+--vim.cmd([[
+--    "filetype plugin indent on
+--]])
 
+-- Let clipboard register be +
 vim.cmd([[
-    "filetype plugin indent on                     " Load indent files, to automatically do language-dependent indenting.
-    "autocmd BufEnter * :syntax sync fromstart
-    "syntax enable
     let g:clipbrdDefaultReg = '+'
-    "set nocompatible
-    "autocmd FileType lua set comments=s1:---,m:--,ex:--
-    nnoremap @ <cmd>execute "noautocmd norm! " . v:count1 . "@" . getcharstr()<cr>  " Fast macros without lazyredraw
+]])
+
+--vim.cmd([[
+--    "autocmd BufEnter * :syntax sync fromstart
+--    "syntax enable
+--    "set nocompatible
+--    "autocmd FileType lua set comments=s1:---,m:--,ex:--
+--]])
+
+-- Fast macros without lazyredraw
+vim.cmd([[
+    nnoremap @ <cmd>execute "noautocmd norm! " . v:count1 . "@" . getcharstr()<cr>
     xnoremap @ :<C-U>execute "noautocmd '<,'>norm! " . v:count1 . "@" . getcharstr()<cr>
 ]])
 
