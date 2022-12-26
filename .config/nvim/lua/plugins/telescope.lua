@@ -329,7 +329,7 @@ function M.find_notes()
     prompt_title = " Find Notes",
     path_display = { "smart" },
     search_dirs = {
-      "~/documents",
+      "~/documents/notes",
     },
     --cwd = "~documents/notes",
     layout_strategy = "horizontal",
