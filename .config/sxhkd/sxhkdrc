@@ -295,9 +295,10 @@ XF86Audio{Raise,Lower}Volume
 alt + {Right,Left}
 	pulsemixer --change-volume {+,-}10
 
+
 #---------------------------------------------------------------
 #
-# Xdotool
+# Xdotool keys
 #
 
 # Move mouse cursor north, west, south, east
@@ -307,6 +308,43 @@ alt + {w,a,s,d}
 # Move mouse cursor diagonally north-west, north-east, south-west, south-east
 shift + alt + {q,e,a,d}
     xdotool mousemove_relative --sync {-- -24 -24, -- 24 -24, -- -24 24,-- 24 24}
+
+# Emulate left mouse click
+alt + i
+    xdotool click --clearmodifiers 1
+
+# Emulate left mouse click select
+alt + shift + i
+    xdotool mousedown 1 sleep 0.5 mousemove_relative --sync {-- -8 0, 0 8, -- 0 -8, 8 0} sleep 0.5 mouseup 1
+
+# Emulate mouse right click
+alt + o
+    xdotool click --clearmodifiers 3
+
+# Emulate mouse scroll up
+alt + n
+    xdotool click --clearmodifiers 4
+
+# Emulate mouse scroll down
+alt + m
+    xdotool click --clearmodifiers 5
+
+# Emulate mouse scroll button
+alt + p
+    xdotool click --clearmodifiers 2
+
+# Emulate home key
+alt + ctrl + Left
+    xdotool keyup Left key --clearmodifiers Home
+
+# Emulate end key
+alt + ctrl + Right
+    xdotool keyup Right key --clearmodifiers End
+
+# Emulate delete key
+~alt + BackSpace
+    xte 'keyup Alt_L' 'key Delete' 'keydown Alt_L'
+
 
 #---------------------------------------------------------------
 #
