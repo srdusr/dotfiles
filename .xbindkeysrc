@@ -1,31 +1,31 @@
-# Up
-"xdotool mousemove_relative --sync -- 0 -24"
-  alt + w
-
-# Left
-"xdotool mousemove_relative --sync -- -24 0"
-  alt + a
-
-# Down
-"xdotool mousemove_relative --sync -- 0 24"
-  alt + s
-
-# Right
-"xdotool mousemove_relative --sync -- 24 0"
-  alt + d
-
-# left + up 
-"xdotool mousemove_relative --sync -- -24 -24"
-  Shift+alt + q
-
-# right + up
-"xdotool mousemove_relative --sync -- 24 -24"
-  Shift+alt + e
-
-# right + down
-"xdotool mousemove_relative --sync -- 24 24"
-  Shift+alt + d
-
-# left + down 
-"xdotool mousemove_relative --sync -- -24 24"
-  Shift+alt + a
+# # Up
+# "xdotool mousemove_relative --sync -- 0 -24"
+#   alt + w
+# 
+# # Left
+# "xdotool mousemove_relative --sync -- -24 0"
+#   alt + a
+# 
+# # Down
+# "xdotool mousemove_relative --sync -- 0 24"
+#   alt + s
+# 
+# # Right
+# "xdotool mousemove_relative --sync -- 24 0"
+#   alt + d
+# 
+# # left + up 
+# "xdotool mousemove_relative --sync -- -24 -24"
+#   Shift+alt + q
+# 
+# # right + up
+# "xdotool mousemove_relative --sync -- 24 -24"
+#   Shift+alt + e
+# 
+# # right + down
+# "xdotool mousemove_relative --sync -- 24 24"
+#   Shift+alt + d
+# 
+# # left + down 
+# "xdotool mousemove_relative --sync -- -24 24"
+#   Shift+alt + a
