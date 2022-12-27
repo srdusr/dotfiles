@@ -295,6 +295,18 @@ XF86Audio{Raise,Lower}Volume
 alt + {Right,Left}
 	pulsemixer --change-volume {+,-}10
 
+#---------------------------------------------------------------
+#
+# Xdotool
+#
+
+# Move mouse cursor north, west, south, east
+alt + {w,a,s,d}
+  xdotool mousemove_relative --sync {-- 0 -24, -- -24 0, 0 24, 24 0}
+
+# Move mouse cursor diagonally north-west, north-east, south-west, south-east
+shift + alt + {q,e,a,d}
+    xdotool mousemove_relative --sync {-- -24 -24, -- 24 -24, -- -24 24,-- 24 24}
 
 #---------------------------------------------------------------
 #
