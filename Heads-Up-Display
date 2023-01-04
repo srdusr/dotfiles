@@ -2,7 +2,7 @@
 
 id=$(xdotool search --class Heads-Up-Display);
 if [ -z "$id" ]; then
-        st -c Heads-Up-Display -e tmux attach -t HUD || tmux new -s HUD;
+        alacritty --class "Heads-Up-Display" -e tmux new-session -A -s HUD -e bash > /dev/null 2>&1 &
 else
         if [ ! -f /tmp/hide_hud ]; then
                 touch /tmp/hide_hud && xdo hide "$id"
