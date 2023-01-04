@@ -59,13 +59,13 @@ bspc rule -a firefox:Toolkit focus=on state=floating sticky=on layer=above recta
 bspc rule -a "https://www.youtube.com - Enhancer for YouTube™ — Mozilla Firefox" state=floating sticky=on layer=above
 bspc rule -a Zathura state=floating
 
-eww daemon &
+#eww daemon &
 
 # SCRATCHPAD
-
 bspc rule -a scratch sticky=on state=floating rectangle=575x320+393+370
 
-bspc rule -a Heads-Up-Display sticky=on state=floating rectangle=320x140+1030+32
+# Heads Up Display (scratchpad)
+bspc rule -a Heads-Up-Display sticky=on state=floating rectangle=360x160+990+40
 
 [ "$1" = 0 ] && {
     nm-applet &
