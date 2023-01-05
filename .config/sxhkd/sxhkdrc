@@ -145,6 +145,14 @@ super + ctrl + {m,x,y,z}
 super + {equal,minus}
     layer.sh {+,-}
 
+## Add a new desktop on the current monitor with name set by rofi
+#super + plus
+#    bspc monitor -a "$(rofi -dmenu)"
+#
+## Remove the current desktop
+#super + underscore
+#    bspc desktop -r
+
 
 #---------------------------------------------------------------
 #
@@ -265,6 +273,9 @@ ctrl + alt + 1
 ctrl + alt + 2
 	bspc rule -a '*' -o state=floating rectangle=320x140+1030+32
 
+# Spawn next window/program into another desktop
+super + alt + {1-9,0}
+  bspc rule -a '*' -o desktop=^{1-9,10}
 
 
 #---------------------------------------------------------------
@@ -363,7 +374,7 @@ super + e
 	~/.local/bin/scripts/Heads-Up-Display
 
 # File manager nnn
-super + n
+super + shift + n
 	$TERMINAL -e nnn
 
 # File manager pcmanfm (GUI)
@@ -377,6 +388,10 @@ super + shift + b
 # Thunderbird mail
 #super + shift + m
 #    thunderbird
+
+# VirtualBox gui
+super + v
+  /usr/bin/VirtualBox  -- :0 vt1
 
 # Discord
 super + shift + d
