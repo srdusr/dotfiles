@@ -378,6 +378,16 @@ alias trash_restore='gio trash --restore "$(gio trash --list | fzf | cut -f 1)"'
 alias ec='$EDITOR $HOME/.config/zsh/.zshrc'
 alias sc="source $HOME/.config/zsh/.zshrc"
 
+# Print previous command into a file
+getlast () {
+    fc -nl $((HISTCMD - 1))
+}
+
+alias pp='getlast 2>&1 |&tee -a output.txt'
+
+# Print output of a command NOTE: Must be used in conjunction but no need for "|" symbol
+alias -g cap='2>&1 | tee -a output.txt'
+
 # confirmation #
 alias mv='mv -i'
 alias cp='cp -i'
