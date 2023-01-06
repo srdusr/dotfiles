@@ -89,6 +89,43 @@ map("n", "<Leader>tc", ":lua require('user.utils').toggle_completion()<CR>")
 
 --vim.api.nvim_set_keymap('n', '<Leader>qr',  '<cmd>:lua require("plugins.telescope").reload()<CR>', { noremap = true, silent = true })
 
+---- Terminal
+--if is_available "toggleterm.nvim" then
+--  local toggle_term_cmd = astronvim.toggle_term_cmd
+map("n", "<leader>gg", ":LazyGit<CR>")
+map("n", "<leader>tt", "<cmd>ToggleTerm<cr>")
+
+---- Fugitive git bindings
+map("n", "<leader>ga", ":Git add %:p<CR><CR>")
+--map("n", "<leader>gs", ":Gstatus<CR>")
+map("n", "<leader>gc", ":Gcommit -v -q<CR>")
+map("n", "<leader>gt", ":Gcommit -v -q %:p<CR>")
+--map("n", "<leader>gd", ":Gdiff<CR>")
+map("n", "<leader>ge", ":Gedit<CR>")
+--map("n", "<leader>gr", ":Gread<Cj>")
+map("n", "<leader>gw", ":Gwrite<CR><CR>")
+map("n", "<leader>gl", ":silent! Glog<CR>:bot copen<CR>")
+--map("n", "<leader>gp", ":Ggrep<Space>")
+--map("n", "<Leader>gp", ":Git push<CR>")
+--map("n", "<Leader>gb", ":Gblame<CR>")
+map("n", "<leader>gm", ":Gmove<Space>")
+--map("n", "<leader>gb", ":Git branch<Space>")
+--map("n", "<leader>go", ":Git checkout<Space>")
+--map("n", "<leader>gps", ":Dispatch! git push<CR>")
+--map("n", "<leader>gpl", ":Dispatch! git pull<CR>")
+
+--  maps.n["<C-\\>"] = { "<cmd>ToggleTerm<cr>", desc = "Toggle terminal" }
+--  maps.n["<leader>gg"] = { function() toggle_term_cmd "lazygit" end, desc = "ToggleTerm lazygit" }
+--  maps.n["<leader>tn"] = { function() toggle_term_cmd "node" end, desc = "ToggleTerm node" }
+--  maps.n["<leader>tu"] = { function() toggle_term_cmd "ncdu" end, desc = "ToggleTerm NCDU" }
+--  maps.n["<leader>tt"] = { function() toggle_term_cmd "htop" end, desc = "ToggleTerm htop" }
+--  maps.n["<leader>tp"] = { function() toggle_term_cmd "python" end, desc = "ToggleTerm python" }
+--  maps.n["<leader>tl"] = { function() toggle_term_cmd "lazygit" end, desc = "ToggleTerm lazygit" }
+--  maps.n["<leader>tf"] = { "<cmd>ToggleTerm direction=float<cr>", desc = "ToggleTerm float" }
+--  maps.n["<leader>th"] = { "<cmd>ToggleTerm size=10 direction=horizontal<cr>", desc = "ToggleTerm horizontal split" }
+--  maps.n["<leader>tv"] = { "<cmd>ToggleTerm size=80 direction=vertical<cr>", desc = "ToggleTerm vertical split" }
+--end
+--
 --Easier split navigations, just ctrl-j instead of ctrl-w then j
 map("n", "<C-J>", "<C-W><C-J>")
 map("n", "<C-K>", "<C-W><C-K>")
@@ -616,6 +653,8 @@ vim.cmd([[
 ---- Terminal
 --if is_available "toggleterm.nvim" then
 --  local toggle_term_cmd = astronvim.toggle_term_cmd
+--" setup mapping to call :LazyGit
+--map.<leader>gg :LazyGit<CR>
 --  maps.n["<C-\\>"] = { "<cmd>ToggleTerm<cr>", desc = "Toggle terminal" }
 --  maps.n["<leader>gg"] = { function() toggle_term_cmd "lazygit" end, desc = "ToggleTerm lazygit" }
 --  maps.n["<leader>tn"] = { function() toggle_term_cmd "node" end, desc = "ToggleTerm node" }

@@ -83,8 +83,8 @@ local modules = {
   "plugins.zen-mode",
   "plugins.colorscheme",
   "plugins.heirline",
+  "plugins.toggleterm",
   --"plugins.dap",
-  --"plugins.toggleterm",
   --"plugins.floatterm",
 }
 
