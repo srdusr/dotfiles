@@ -21,8 +21,8 @@ super + a
 	~/.config/polybar/scripts/menu.sh
 
 # Shutdown menu
-ctrl + alt + Delete
-	~/.config/polybar/scripts/sysmenu.sh
+#super + alt + Delete
+#	~/.config/polybar/scripts/sysmenu.sh
 
 # lockscreen
 super + Escape
@@ -80,6 +80,8 @@ shift + Print
 # make sxhkd reload its configuration files:
 super + ctrl + x
 	pkill -USR1 -x sxhkd; dunstify "Sxhkd configuration reloaded"
+
+
 
 #---------------------------------------------------------------
 #
@@ -144,14 +146,6 @@ super + ctrl + {m,x,y,z}
 # Move layers of windows above/below each other (script)
 super + {equal,minus}
     layer.sh {+,-}
-
-## Add a new desktop on the current monitor with name set by rofi
-#super + plus
-#    bspc monitor -a "$(rofi -dmenu)"
-#
-## Remove the current desktop
-#super + underscore
-#    bspc desktop -r
 
 
 #---------------------------------------------------------------
@@ -234,6 +228,8 @@ super + ctrl + i
 # Balance nodes
 super + alt + i
    bspc node @/ -B
+
+
 
 #---------------------------------------------------------------
 #
