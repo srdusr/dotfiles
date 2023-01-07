@@ -262,12 +262,12 @@ super + shift + s
 	bspc node -t pseudo_tiled; bspc node -t floating && wtp 340 40 680 700 "$(pfw)"
 
 # Spawn next window/program into predefined floating window
-ctrl + alt + 1
-	bspc rule -a '*' -o state=floating rectangle=680x700+340+40
+super + ctrl + s
+	bspc rule -a '*' -o state=floating rectangle=720x480+320+200
 
 # Spawn next window/program into predefined smaller Heads-Up-Display like floating window
-ctrl + alt + 2
-	bspc rule -a '*' -o state=floating rectangle=320x140+1030+32
+#ctrl + alt + 2
+#	bspc rule -a '*' -o state=floating rectangle=320x140+1030+32
 
 # Spawn next window/program into another desktop
 super + alt + {1-9,0}
