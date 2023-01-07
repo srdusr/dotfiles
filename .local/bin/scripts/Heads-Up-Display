@@ -1,0 +1,13 @@
+#!/bin/sh
+
+id=$(xdotool search --class Heads-Up-Display);
+if [ -z "$id" ]; then
+        alacritty --class "Heads-Up-Display" -e tmux new-session -A -s HUD -e bash > /dev/null 2>&1 &
+else
+        if [ ! -f /tmp/hide_hud ]; then
+                touch /tmp/hide_hud && xdo hide "$id"
+        elif [ -f /tmp/hide_hud ]; then
+                rm /tmp/hide_hud && xdo show "$id"
+        fi
+fi
+
