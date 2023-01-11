@@ -259,7 +259,7 @@ shift + alt + {h,j,k,l}
 
 # Resize window into predefined pseudo_tiled window
 super + shift + s
-	bspc node -t pseudo_tiled; bspc node -t floating && wtp 340 40 680 700 "$(pfw)"
+	bspc node -t pseudo_tiled; bspc node -t floating && wtp 320 200 720 480 "$(pfw)"
 
 # Spawn next window/program into predefined floating window
 super + ctrl + s
