@@ -4,17 +4,17 @@
 live_config_reload: true
 
 window:
-  opacity: 0.8
+  opacity: 0.9
   dynamic_title: true
   dimensions:
     columns: 0
     lines: 0
 
 
-  #startup_mode: SimpleFullscreen
-  #position:
-    #x: 0
-    #y: 0
+    #  startup_mode: Maximized
+    #  position:
+    #    x: 0
+    #    y: 0
 
   padding:
     x: 9
