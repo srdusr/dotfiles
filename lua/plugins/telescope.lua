@@ -404,6 +404,19 @@ function M.find_notes()
     search_dirs = {
       '~/documents/notes/private/',
       '~/documents/notes',
+    },
+    layout_strategy = 'horizontal',
+    layout_config = { preview_width = 0.65, width = 0.75 },
+  })
+end
+
+function M.find_private()
+  require('telescope.builtin').find_files({
+    hidden = true,
+    no_ignore = false,
+    prompt_title = ' Find Notes',
+    path_display = { 'smart' },
+    search_dirs = {
       '~/notes/private',
       '~/notes',
     },
