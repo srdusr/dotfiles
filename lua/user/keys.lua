@@ -297,6 +297,7 @@ map('n', '<leader>ffw', [[<Cmd>lua require'plugins.telescope'.find_projects()<CR
 map('n', '<leader>ffb', [[<Cmd>lua require'plugins.telescope'.find_books()<CR>]])                  -- find books
 map('n', '<leader>ffn', [[<Cmd>lua require'plugins.telescope'.find_notes()<CR>]])                  -- find notes
 map('n', '<leader>fgn', [[<Cmd>lua require'plugins.telescope'.grep_notes()<CR>]])                  -- search notes
+map('n', '<leader>ffp', [[<Cmd>lua require'plugins.telescope'.find_private()<CR>]])                -- search notes
 map('n', '<Leader>frf', "<cmd>lua require('telescope').extensions.recent_files.pick()<CR>")
 map('n', '<leader>ffc', "<cmd>lua require('telescope.builtin').current_buffer_fuzzy_find()<cr>")
 map('n', '<Leader>f/', "<cmd>lua require('telescope').extensions.file_browser.file_browser()<CR>")
