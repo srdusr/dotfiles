@@ -1,0 +1,14 @@
+
+root = true
+
+
+[*]
+charset = utf-8
+indent_style = tab
+indent_size = 4
+max_line_length = 10000
+
+# Python config
+[**.py]
+max_line_length = 10000
+indent_size = 4
