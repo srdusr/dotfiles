@@ -35,7 +35,7 @@ TR=("$SIZE" "$SIZE")
 function onEnter {
     ZONE=$1
     case "$1" in
-    #'B') eww open status &>/dev/null ;;
+    'T') eww open status &>/dev/null ;;
         #'L') eww open panel &>/dev/null ;;
     'R') eww open bar &>/dev/null ;;
         #'BL') launch-rofi ;;
@@ -46,7 +46,7 @@ function onEnter {
 function onExit {
     ZONE=''
     case "$1" in
-    #'B') eww close status &>/dev/null ;;
+    'T') eww close status &>/dev/null ;;
         #'L') eww close panel &>/dev/null ;;
     'R') eww close bar &>/dev/null ;;
         #'TR') cycleDesktops ;;
