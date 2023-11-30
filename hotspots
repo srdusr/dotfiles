@@ -13,6 +13,8 @@
 # hotspot size
 SIZE=2
 
+DELAY=0.7 # Adjust the delay time in seconds
+
 # active hotspot dimensions (width, height)
 B=(1100 140)
 T=(700 "$SIZE")
@@ -35,11 +37,8 @@ TR=("$SIZE" "$SIZE")
 function onEnter {
     ZONE=$1
     case "$1" in
-    'T') eww open status &>/dev/null ;;
-        #'L') eww open panel &>/dev/null ;;
-    'R') eww open bar &>/dev/null ;;
-        #'BL') launch-rofi ;;
-        #'TR') cycleDesktops ;;
+    'T') sleep "$DELAY" && [ "$ZONE" == "T" ] && eww open status &>/dev/null ;;
+    'R') sleep "$DELAY" && [ "$ZONE" == "R" ] && eww open bar &>/dev/null ;;
     esac
 }
 
