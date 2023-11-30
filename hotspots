@@ -10,12 +10,10 @@
 # TODO:
 # - better multimonitor support
 
-# hotspot size
+# Hotspot size
 SIZE=2
 
-DELAY=0.7 # Adjust the delay time in seconds
-
-# active hotspot dimensions (width, height)
+# Active hotspot dimensions (width, height)
 B=(1100 140)
 T=(700 "$SIZE")
 L=(460 700)
@@ -25,37 +23,51 @@ BR=("$SIZE" "$SIZE")
 TL=(400 300)
 TR=("$SIZE" "$SIZE")
 
-## event handlers
-#function cycleDesktops {
-#    # by resetting $ZONE the onEnter event will fire
-#    # repeatedly and no onExit event will be given
-#    ZONE=""
-#    ~/.scripts/show-desktop next
-#    sleep 0.3
-#}
+# Variables to store the timestamp when the cursor entered a zone
+ENTER_TIMESTAMP=0
 
-function onEnter {
+# Function to reset the timestamp
+function resetTimestamp() {
+    ENTER_TIMESTAMP=0
+}
+
+# Function to handle onEnter with a delay
+function onEnterWithDelay() {
+    local zone=$1
+    local current_time=$(date +%s)
+
+    if ((ENTER_TIMESTAMP == 0)); then
+        # Cursor has just entered the zone, store the timestamp
+        ENTER_TIMESTAMP=$current_time
+    elif ((current_time - ENTER_TIMESTAMP >= 2)); then
+        # Cursor has been in the zone for 2 seconds or more, trigger onEnter
+        onEnter "$zone"
+        resetTimestamp
+    fi
+}
+
+# Function to handle onEnter event
+function onEnter() {
     ZONE=$1
     case "$1" in
-        'T') sleep "$DELAY" && [ "$ZONE" == "T" ] && eww open status &>/dev/null ;;
-        'R') sleep "$DELAY" && [ "$ZONE" == "R" ] && eww open bar &>/dev/null ;;
+    'T') eww open status &>/dev/null ;;
+    'R') eww open bar &>/dev/null ;;
     esac
 }
 
-function onExit {
+# Function to handle onExit event
+function onExit() {
     ZONE=''
     case "$1" in
-        'T') eww close status &>/dev/null ;;
-            #'L') eww close panel &>/dev/null ;;
-        'R') eww close bar &>/dev/null ;;
-            #'TR') cycleDesktops ;;
+    'T') eww close status &>/dev/null ;;
+    'R') eww close bar &>/dev/null ;;
     esac
 }
 
-# get screen dimensions (returns: WIDTH, HEIGHT)
+# Get screen dimensions (returns: WIDTH, HEIGHT)
 eval "$(xdotool getdisplaygeometry --shell)"
 
-# calculate coordinates
+# Calculate coordinates
 BLY=$((HEIGHT - BL[1]))
 BRX=$((WIDTH - BR[0]))
 BRY=$((HEIGHT - BR[1]))
@@ -71,47 +83,39 @@ RY2=$(((HEIGHT + R[1]) / 2))
 H=$((HEIGHT - SIZE))
 W=$((WIDTH - SIZE))
 
-# watch mouse
+# Watch mouse
 while :; do
     sleep 0.1
 
-    # get mouse location (returns: X, Y)
+    # Get mouse location (returns: X, Y)
     eval "$(xdotool getmouselocation --shell)"
 
     if [ "$ZONE" = "" ]; then
         if [[ "$Y" -ge "$H" ]]; then
             if [[ "$X" -lt "$SIZE" ]]; then
-                onEnter BL
+                onEnterWithDelay BL
             elif [[ "$X" -gt "$BX1" && "$X" -lt "$BX2" ]]; then
-                onEnter B
+                onEnterWithDelay B
             elif [[ "$X" -gt "$W" ]]; then
-                onEnter BR
+                onEnterWithDelay BR
             fi
         elif [[ "$Y" -lt "$SIZE" && "$X" -gt $((WIDTH / 3)) && "$X" -lt $((2 * WIDTH / 3)) ]]; then
-            onEnter T
+            onEnterWithDelay T
         elif [[ "$X" -lt "$SIZE" && "$Y" -gt "$LY1" && "$Y" -lt "$LY2" ]]; then
-            onEnter L
+            onEnterWithDelay L
         elif [[ "$X" -gt "$W" && "$Y" -gt "$RY1" && "$Y" -lt "$RY2" ]]; then
-            onEnter R
+            onEnterWithDelay R
         fi
     else
         case "$ZONE" in
-            'B') [[ "$X" -lt "$BX1" || "$X" -gt "$BX2" || "$Y" -lt "$BY" ]] &&
-                onExit B ;;
-            'L') [[ "$X" -ge "${L[0]}" || "$Y" -lt "$LY1" || "$Y" -gt "$LY2" ]] &&
-                onExit L ;;
-            'R') [[ "$X" -le "$RX" || "$Y" -lt "$RY1" || "$Y" -gt "$RY2" ]] &&
-                onExit R ;;
-            'T') [[ "$X" -lt "$BX1" || "$X" -gt "$BX2" || "$Y" -gt "${T[1]}" ]] &&
-                onExit T ;;
-            'BL') [[ "$X" -ge "${BL[0]}" || "$Y" -lt "$BLY" ]] &&
-                onExit BL ;;
-            'BR') [[ "$X" -le "$BRX" || "$Y" -lt "$BRY" ]] &&
-                onExit BR ;;
-            'TL') [[ "$X" -ge "${TL[0]}" || "$Y" -ge "${TL[1]}" ]] &&
-                onExit TL ;;
-            'TR') [[ "$X" -le "$TRX" || "$Y" -ge "${TR[1]}" ]] &&
-                onExit TR ;;
+        'B') [[ "$X" -lt "$BX1" || "$X" -gt "$BX2" || "$Y" -lt "$BY" ]] && onExit B ;;
+        'L') [[ "$X" -ge "${L[0]}" || "$Y" -lt "$LY1" || "$Y" -gt "$LY2" ]] && onExit L ;;
+        'R') [[ "$X" -le "$RX" || "$Y" -lt "$RY1" || "$Y" -gt "$RY2" ]] && onExit R ;;
+        'T') [[ "$X" -lt "$BX1" || "$X" -gt "$BX2" || "$Y" -gt "${T[1]}" ]] && onExit T ;;
+        'BL') [[ "$X" -ge "${BL[0]}" || "$Y" -lt "$BLY" ]] && onExit BL ;;
+        'BR') [[ "$X" -le "$BRX" || "$Y" -lt "$BRY" ]] && onExit BR ;;
+        'TL') [[ "$X" -ge "${TL[0]}" || "$Y" -ge "${TL[1]}" ]] && onExit TL ;;
+        'TR') [[ "$X" -le "$TRX" || "$Y" -ge "${TR[1]}" ]] && onExit TR ;;
         esac
     fi
 done
