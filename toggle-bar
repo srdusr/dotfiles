@@ -1,0 +1,17 @@
+#!/bin/bash
+
+EWW=$(which eww)
+
+# Define the file to store the state
+state_file="$HOME/.eww_module_state"
+
+# Check if the module is currently running
+if [ -e "$state_file" ]; then
+    # If the file exists, the module is running, so close it
+    rm "$state_file"
+    $EWW close bar &
+else
+    # If the file doesn't exist, the module is not running, so start it
+    touch "$state_file"
+    $EWW open bar &
+fi
