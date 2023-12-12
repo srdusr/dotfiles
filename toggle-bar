@@ -1,17 +1,33 @@
 #!/bin/bash
 
 EWW=$(which eww)
+STATE_FILE="$HOME/.eww_module_state"
+BAR_CLASS="Eww - bar" # Update this with the actual class name of your eww bar window
 
-# Define the file to store the state
-state_file="$HOME/.eww_module_state"
+# Function to check if the focused window is the eww bar
+is_eww_bar_focused() {
+    focused_class=$(xprop -id "$(xdotool getactivewindow)" | awk -F '"' '/WM_CLASS/{print $4}')
+    [ "$focused_class" == "$BAR_CLASS" ]
+}
 
 # Check if the module is currently running
-if [ -e "$state_file" ]; then
+if [ -e "$STATE_FILE" ]; then
     # If the file exists, the module is running, so close it
-    rm "$state_file"
-    $EWW close bar &
+    rm "$STATE_FILE"
+    "$EWW" close bar &
+    xdotool key --clearmodifiers Escape
+
+    # Introduce a delay before checking if the eww bar is focused
+    sleep 0.2
+
+    # Check if the eww bar is focused, if not, close it
+    if ! is_eww_bar_focused; then
+        sleep 0.2
+        "$EWW" close bar &
+        xdotool key --clearmodifiers Escape
+    fi
 else
     # If the file doesn't exist, the module is not running, so start it
-    touch "$state_file"
-    $EWW open bar &
+    touch "$STATE_FILE"
+    "$EWW" open bar &
 fi
