@@ -50,8 +50,8 @@ function onEnterWithDelay() {
 function onEnter() {
     ZONE=$1
     case "$1" in
-    'T') eww open status &>/dev/null ;;
-    'R') eww open bar &>/dev/null ;;
+        'T') eww open status &>/dev/null ;;
+            #'R') eww open bar &>/dev/null ;;
     esac
 }
 
@@ -59,8 +59,8 @@ function onEnter() {
 function onExit() {
     ZONE=''
     case "$1" in
-    'T') eww close status &>/dev/null ;;
-    'R') eww close bar &>/dev/null ;;
+        'T') eww close status &>/dev/null ;;
+        'R') eww close bar &>/dev/null ;;
     esac
 }
 
@@ -108,14 +108,14 @@ while :; do
         fi
     else
         case "$ZONE" in
-        'B') [[ "$X" -lt "$BX1" || "$X" -gt "$BX2" || "$Y" -lt "$BY" ]] && onExit B ;;
-        'L') [[ "$X" -ge "${L[0]}" || "$Y" -lt "$LY1" || "$Y" -gt "$LY2" ]] && onExit L ;;
-        'R') [[ "$X" -le "$RX" || "$Y" -lt "$RY1" || "$Y" -gt "$RY2" ]] && onExit R ;;
-        'T') [[ "$X" -lt "$BX1" || "$X" -gt "$BX2" || "$Y" -gt "${T[1]}" ]] && onExit T ;;
-        'BL') [[ "$X" -ge "${BL[0]}" || "$Y" -lt "$BLY" ]] && onExit BL ;;
-        'BR') [[ "$X" -le "$BRX" || "$Y" -lt "$BRY" ]] && onExit BR ;;
-        'TL') [[ "$X" -ge "${TL[0]}" || "$Y" -ge "${TL[1]}" ]] && onExit TL ;;
-        'TR') [[ "$X" -le "$TRX" || "$Y" -ge "${TR[1]}" ]] && onExit TR ;;
+            'B') [[ "$X" -lt "$BX1" || "$X" -gt "$BX2" || "$Y" -lt "$BY" ]] && onExit B ;;
+            'L') [[ "$X" -ge "${L[0]}" || "$Y" -lt "$LY1" || "$Y" -gt "$LY2" ]] && onExit L ;;
+            'R') [[ "$X" -le "$RX" || "$Y" -lt "$RY1" || "$Y" -gt "$RY2" ]] && onExit R ;;
+            'T') [[ "$X" -lt "$BX1" || "$X" -gt "$BX2" || "$Y" -gt "${T[1]}" ]] && onExit T ;;
+            'BL') [[ "$X" -ge "${BL[0]}" || "$Y" -lt "$BLY" ]] && onExit BL ;;
+            'BR') [[ "$X" -le "$BRX" || "$Y" -lt "$BRY" ]] && onExit BR ;;
+            'TL') [[ "$X" -ge "${TL[0]}" || "$Y" -ge "${TL[1]}" ]] && onExit TL ;;
+            'TR') [[ "$X" -le "$TRX" || "$Y" -ge "${TR[1]}" ]] && onExit TR ;;
         esac
     fi
 done
