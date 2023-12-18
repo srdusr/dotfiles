@@ -1,0 +1,53 @@
+#!/bin/bash
+
+EWW=$(which eww)
+STATE_FILE="$HOME/.eww_module_state"
+
+# Function to close the control module
+close_control_module() {
+    "$EWW" close control &
+}
+
+# Function to open the control module
+open_control_module() {
+    touch "$STATE_FILE"
+    "$EWW" open control &
+}
+
+# Function to check if the cursor is inside the control window
+is_cursor_inside_control() {
+    local mouse_x=$(xdotool getmouselocation --shell | awk -F '=' '/X/{print $2}')
+    local mouse_y=$(xdotool getmouselocation --shell | awk -F '=' '/Y/{print $2}')
+
+    local control_x=1110
+    local control_y=0
+    local control_width=240
+    local control_height=360
+
+    [ "$mouse_x" -ge "$control_x" -a "$mouse_x" -le "$((control_x + control_width))" -a \
+        "$mouse_y" -ge "$control_y" -a "$mouse_y" -le "$((control_y + control_height))" ]
+}
+
+# Function to close the control module if cursor is outside the control window
+close_control_on_leave() {
+    while true; do
+        sleep 0.1
+        if [ -e "$STATE_FILE" ] && ! is_cursor_inside_control; then
+            close_control_module
+            rm "$STATE_FILE"
+            break
+        fi
+    done
+}
+
+# Check if the module is currently running
+if [ -e "$STATE_FILE" ]; then
+    # If the file exists, the module is running, so close it when cursor leaves
+    close_control_on_leave
+else
+    # If the file doesn't exist, the module is not running, so start it
+    open_control_module
+
+    # Start monitoring cursor position to close the control window if it leaves
+    close_control_on_leave &
+fi
