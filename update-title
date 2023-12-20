@@ -1,0 +1,21 @@
+#!/bin/bash
+
+while true; do
+    bg_color="#000000" # Initial background color
+    text_color="#979286"
+    font="%{T1}"
+
+    active_node=$(xdotool getactivewindow)
+
+    if [[ "$1" -eq "$active_node" ]]; then
+        bg_color="#000000" # Change the background color when the window is active
+        text_color="#FFFFFF"
+        font="%{T2}"
+    fi
+
+    title=$(xtitle "$1")
+
+    echo -e "%{B$bg_color}%{F$text_color}$font%{c}%{A1:bspc node $1 -f:}%{A2:bspc node $1 -c:}%{A5:bspc node $1 -d last:}%{A4:bspc node $1 -s biggest && ~/.scripts/title-bar:}$title%{A}%{A}%{A}%{A}%{F#909090}%{r}%{A:bspc node $1 -c:}x   %{A}"
+
+    sleep 0.5
+done
