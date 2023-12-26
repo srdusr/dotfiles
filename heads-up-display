@@ -4,13 +4,13 @@
 # Created On: Wed 05 Feb 2023 01:24:37 AM CAT
 # Project: bspwm scratchpad (Heads-Up-Display) with tmux session
 
-if id="$(xdo id -N Heads-Up-Display)"
-        then bspc node "$id" -g hidden -f
-        else kitty --class "Heads-Up-Display" -e tmux new-session -A -s HUD -e bash > /dev/null 2>&1 &
+if id="$(xdo id -N heads-up-display)"; then
+    bspc node "$id" -g hidden -f
+else
+    kitty --class "heads-up-display" -e tmux new-session -A -s HUD -e bash >/dev/null 2>&1 &
 fi
 
 #- - - - - - - - - -
-
 
 ### Alternative method
 
@@ -25,4 +25,3 @@ fi
 #                rm /tmp/hide_hud && xdo show "$id"
 #        fi
 #fi
-
