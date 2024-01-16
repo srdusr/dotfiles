@@ -362,8 +362,19 @@ return packer.startup(function(use)
   use({
     'ellisonleao/glow.nvim', -- Markdown Preview
     config = function()
+      local glow_path
+
+      -- Check if glow exists in ~/.local/bin
+      if vim.fn.executable('~/.local/bin/glow') == 1 then
+        glow_path = '~/.local/bin/glow'
+      else
+        -- Fallback to /usr/bin/glow
+        glow_path = '/usr/bin/glow'
+      end
+
       require('glow').setup({
         style = 'dark',
+        glow_path = glow_path,
       })
     end,
   })
