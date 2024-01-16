@@ -40,6 +40,12 @@ map('n', 'q', function()
   end
 end, { expr = true, replace_keycodes = true })
 
+-- Write as sudo
+map('c', 'W', "exe 'w !sudo tee >/dev/null %:p:S' | setl nomod<CR>", { silent = true, desc = 'Write as Sudo' })
+
+-- Create new file
+map('n', '<leader>e', [[:e <C-R>=expand("%:h")..'/'<CR>]], { noremap = true, silent = true, desc = 'New file' })
+
 -- Combine buffers list with buffer name
 map('n', '<Leader>b', ':buffers<CR>:buffer<Space>')
 
@@ -274,7 +280,7 @@ map('n', '<leader>gm', ':Gmove<Space>')
 
 -- Telescope
 map('n', '<leader>ff', ":cd %:p:h<CR>:pwd<CR><cmd>lua require('telescope.builtin').find_files()<cr>") -- find files with hidden option
-map('n', '<leader>fF', ":cd %:p:h<CR>:pwd<CR><cmd>lua require('user.mods').findFilesInCwd()<CR>", { noremap = true, silent = true, desc = 'Find files in cwd' })
+map('n', '<leader>fF', ':cd %:p:h<CR>:pwd<CR><cmd>lua require("user.mods").findFilesInCwd()<CR>', { noremap = true, silent = true, desc = 'Find files in cwd' })
 map('n', '<leader>f.', function()
   require('telescope.builtin').find_files({ hidden = true, no_ignore = true })
 end) -- find all files
