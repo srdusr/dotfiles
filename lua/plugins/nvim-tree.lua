@@ -207,12 +207,27 @@ require('nvim-tree').setup({
   --respect_buf_cwd = false,
   sync_root_with_cwd = true,
   --reload_on_bufenter = false,
+  filesystem_watchers = {
+    enable = true,
+    debounce_delay = 50,
+    ignore_dirs = { 'node_modules' },
+  },
   view = view,
   system_open = system_open,
   renderer = renderer,
   on_attach = on_attach,
   notify = {
     threshold = vim.log.levels.ERROR,
+  },
+  log = {
+    enable = true,
+    truncate = true,
+    types = {
+      diagnostics = true,
+      git = true,
+      profile = true,
+      watcher = true,
+    },
   },
   git = { ignore = false },
   diagnostics = {
