@@ -40,11 +40,11 @@ map('n', 'q', function()
   end
 end, { expr = true, replace_keycodes = true })
 
--- Write as sudo
-map('c', 'W', "exe 'w !sudo tee >/dev/null %:p:S' | setl nomod<CR>", { silent = true, desc = 'Write as Sudo' })
-
--- Create new file
+-- Edit new file
 map('n', '<leader>e', [[:e <C-R>=expand("%:h")..'/'<CR>]], { noremap = true, silent = true, desc = 'New file' })
+
+-- Write as sudo
+map('c', 'W', "exe 'w !sudo tee >/dev/null %:p:S' | setl nomod", { silent = true, desc = 'Write as Sudo' })
 
 -- Combine buffers list with buffer name
 map('n', '<Leader>b', ':buffers<CR>:buffer<Space>')
@@ -280,7 +280,7 @@ map('n', '<leader>gm', ':Gmove<Space>')
 
 -- Telescope
 map('n', '<leader>ff', ":cd %:p:h<CR>:pwd<CR><cmd>lua require('telescope.builtin').find_files()<cr>") -- find files with hidden option
-map('n', '<leader>fF', ':cd %:p:h<CR>:pwd<CR><cmd>lua require("user.mods").findFilesInCwd()<CR>', { noremap = true, silent = true, desc = 'Find files in cwd' })
+map('n', '<leader>fF', ":cd %:p:h<CR>:pwd<CR><cmd>lua require('user.mods').findFilesInCwd()<CR>", { noremap = true, silent = true, desc = 'Find files in cwd' })
 map('n', '<leader>f.', function()
   require('telescope.builtin').find_files({ hidden = true, no_ignore = true })
 end) -- find all files
@@ -303,8 +303,6 @@ map('n', '<leader>ffw', [[<Cmd>lua require'plugins.telescope'.find_projects()<CR
 map('n', '<leader>ffb', [[<Cmd>lua require'plugins.telescope'.find_books()<CR>]])                  -- find books
 map('n', '<leader>ffn', [[<Cmd>lua require'plugins.telescope'.find_notes()<CR>]])                  -- find notes
 map('n', '<leader>fgn', [[<Cmd>lua require'plugins.telescope'.grep_notes()<CR>]])                  -- search notes
-map('n', '<leader>ffp', [[<Cmd>lua require'plugins.telescope'.find_private()<CR>]])                -- search notes
-map('n', '<leader>ffl', [[<Cmd>lua require'plugins.telescope'.find_logs()<CR>]])                   -- search notes
 map('n', '<Leader>frf', "<cmd>lua require('telescope').extensions.recent_files.pick()<CR>")
 map('n', '<leader>ffc', "<cmd>lua require('telescope.builtin').current_buffer_fuzzy_find()<cr>")
 map('n', '<Leader>f/', "<cmd>lua require('telescope').extensions.file_browser.file_browser()<CR>")
