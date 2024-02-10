@@ -210,7 +210,7 @@ require('nvim-tree').setup({
   filesystem_watchers = {
     enable = true,
     debounce_delay = 50,
-    ignore_dirs = { 'node_modules' },
+    ignore_dirs = { 'node_modules', '.config/nvm' },
   },
   view = view,
   system_open = system_open,
