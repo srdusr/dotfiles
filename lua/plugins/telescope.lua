@@ -324,6 +324,9 @@ function M.find_configs()
     table.insert(tracked_files, os.getenv('HOME') .. '/' .. file)
   end
 
+  local history = os.getenv('HOME') .. '/.config/zsh/.zhistory'
+  table.insert(tracked_files, history)
+
   require('telescope.builtin').find_files({
     hidden = true,
     no_ignore = false,
