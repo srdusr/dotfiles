@@ -79,6 +79,7 @@ local modules = {
   "plugins.gitsigns",
   "plugins.sniprun",
   "plugins.session",
+  "plugins.surround",
   "plugins.neoscroll",
   "plugins.statuscol",
   "plugins.trouble",
@@ -98,6 +99,7 @@ local modules = {
   "plugins.hardtime",
   "plugins.notify",
   "plugins.overseer",
+  "plugins.vimtex",
   --"plugins.modify-blend",
 }
 
