@@ -264,6 +264,7 @@ return packer.startup(function(use)
   use("kyazdani42/nvim-web-devicons")                                       --
   use("onsails/lspkind-nvim")                                               --
   use({ "kevinhwang91/nvim-ufo", requires = "kevinhwang91/promise-async" }) -- Fold code
+  use("lukas-reineke/indent-blankline.nvim")
   use({
     "luukvbaal/statuscol.nvim",
     config = function()
