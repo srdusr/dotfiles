@@ -1,30 +1,32 @@
-local lspconfig = require('lspconfig')
-local mason_lspconfig = require('mason-lspconfig')
-local null_ls = require('null-ls')
+local lspconfig = require("lspconfig")
+local mason_lspconfig = require("mason-lspconfig")
+local null_ls = require("null-ls")
 -- local lsp_lines = require('lsp_lines')
-require('mason').setup()
-require('mason-null-ls').setup({ handlers = {}, ensure_installed = nil, automatic_installation = true, automatic_setup = true })
+require("mason").setup()
+require("mason-null-ls").setup({ handlers = {}, ensure_installed = nil, automatic_installation = true,
+  automatic_setup = true })
 
 local keymap = vim.keymap
 local cmd = vim.cmd
 
-local border = { { '┌', 'FloatBorder' }, { '─', 'FloatBorder' }, { '┐', 'FloatBorder' }, { '│', 'FloatBorder' }, { '┘', 'FloatBorder' }, { '─', 'FloatBorder' }, { '└', 'FloatBorder' }, { '│', 'FloatBorder' } }
+local border = { { "┌", "FloatBorder" }, { "─", "FloatBorder" }, { "┐", "FloatBorder" }, { "│", "FloatBorder" },
+  { "┘", "FloatBorder" }, { "─", "FloatBorder" }, { "└", "FloatBorder" }, { "│", "FloatBorder" } }
 
 -- Set up LSP servers if not done before
 if not vim.g.lsp_setup_done then
   -- Clear existing LSP clients
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    local clients = require('user.mods').get_lsp_clients(bufnr)
+    local clients = require("user.mods").get_lsp_clients(bufnr)
 
     for _, client in ipairs(clients) do
       client.stop()
     end
   end
 
-  local signs = { Error = ' ', Warn = '▲', Info = '􀅳', Hint = '⚑' }
+  local signs = { Error = " ", Warn = "▲", Info = "􀅳", Hint = "⚑" }
   -- 
   for type, icon in pairs(signs) do
-    local hl = 'DiagnosticSign' .. type
+    local hl = "DiagnosticSign" .. type
     vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = hl })
   end
 
@@ -47,7 +49,7 @@ if not vim.g.lsp_setup_done then
     virtual_lines = false,
     float = {
       show_header = true,
-      source = 'if_many', -- border = 'rounded',
+      source = "if_many", -- border = 'rounded',
       border = border,
       focusable = true,
     },
@@ -55,15 +57,16 @@ if not vim.g.lsp_setup_done then
     severity_sort = true,     -- default to false
   })
 
-  vim.lsp.handlers['textDocument/publishDiagnostics'] = vim.lsp.with(vim.lsp.diagnostic.on_publish_diagnostics, { underline = false, virtual_text = false, signs = true, update_in_insert = false })
+  vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(vim.lsp.diagnostic.on_publish_diagnostics,
+    { underline = false, virtual_text = false, signs = true, update_in_insert = false })
 
-  vim.lsp.handlers['textDocument/hover'] = vim.lsp.with(vim.lsp.handlers.hover, { border = 'rounded' })
-  vim.lsp.handlers['textDocument/signatureHelp'] = vim.lsp.with(vim.lsp.handlers.signature_help, { border = 'rounded' })
+  vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded" })
+  vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, { border = "rounded" })
 
   -- Use an on_attach function to only map the following keys after the language server attaches to the current buffer
   local on_attach = function(client, bufnr)
     -- Enable completion triggered by <c-x><c-o>
-    vim.api.nvim_buf_set_option(bufnr, 'omnifunc', 'v:lua.vim.lsp.omnifunc')
+    vim.api.nvim_buf_set_option(bufnr, "omnifunc", "v:lua.vim.lsp.omnifunc")
     local map = function(mode, l, r, opts)
       opts = opts or {}
       opts.silent = true
@@ -72,40 +75,41 @@ if not vim.g.lsp_setup_done then
       keymap.set(mode, l, r, opts)
     end
     -- Mappings
-    map('n', 'K', '<Cmd>lua vim.lsp.buf.hover()<CR>')
+    map("n", "K", "<Cmd>lua vim.lsp.buf.hover()<CR>")
     -- map("n", "gd", "<Cmd>lua vim.lsp.buf.definition()<CR>")
-    map('n', 'gd', "<cmd>lua require('goto-preview').goto_preview_definition()<CR>")
+    map("n", "gd", "<cmd>lua require('goto-preview').goto_preview_definition()<CR>")
     -- map("n", "gi", "<Cmd>lua vim.lsp.buf.implementation()<CR>")
-    map('n', 'gi', "<cmd>lua require('goto-preview').goto_preview_implementation()<CR>")
+    map("n", "gi", "<cmd>lua require('goto-preview').goto_preview_implementation()<CR>")
     -- map("n", "gr", "<Cmd>lua vim.lsp.buf.references()<CR>")
-    map('n', 'gr', "<cmd>lua require('goto-preview').goto_preview_references()<CR>")
-    map('n', 'gD', '<Cmd>lua vim.lsp.buf.declaration()<CR>') -- most lsp servers don't implement textDocument/Declaration, so gD is useless for now.
-    map('n', '<leader>k', '<Cmd>lua vim.lsp.buf.signature_help()<CR>')
+    map("n", "gr", "<cmd>lua require('goto-preview').goto_preview_references()<CR>")
+    map("n", "gD", "<Cmd>lua vim.lsp.buf.declaration()<CR>") -- most lsp servers don't implement textDocument/Declaration, so gD is useless for now.
+    map("n", "<leader>k", "<Cmd>lua vim.lsp.buf.signature_help()<CR>")
     -- map("n", "gt", "<Cmd>lua vim.lsp.buf.type_definition()<CR>")
-    map('n', 'gt', "<cmd>lua require('goto-preview').goto_preview_type_definition()<CR>")
-    map('n', 'gn', '<Cmd>lua vim.lsp.buf.rename()<CR>')
-    map('n', 'ga', '<Cmd>lua vim.lsp.buf.code_action()<CR>')
-    map('n', 'gf', '<Cmd>lua vim.lsp.buf.format()<CR>')
-    map('n', 'go', '<Cmd>lua vim.diagnostic.open_float()<CR>')
-    map('n', '<leader>go', ":call utils#ToggleDiagnosticsOpenFloat()<CR> | :echom ('Toggle Diagnostics Float open/close...')<CR> | :sl! | echo ('')<CR>")
-    map('n', 'gq', '<Cmd>lua vim.diagnostic.setloclist()<CR>')
-    map('n', '[d', '<Cmd>lua vim.diagnostic.goto_prev()<CR>')
-    map('n', ']d', '<Cmd>lua vim.diagnostic.goto_next()<CR>')
-    map('n', 'gs', '<Cmd>lua vim.lsp.buf.document_symbol()<CR>')
-    map('n', 'gw', '<Cmd>lua vim.lsp.buf.workspace_symbol()<CR>')
-    map('n', '<leader>wa', '<Cmd>lua vim.lsp.buf.add_workspace_folder()<CR>')
-    map('n', '<leader>wr', '<Cmd>lua vim.lsp.buf.remove_workspace_folder()<CR>')
-    map('n', '<leader>wl', function()
+    map("n", "gt", "<cmd>lua require('goto-preview').goto_preview_type_definition()<CR>")
+    map("n", "gn", "<Cmd>lua vim.lsp.buf.rename()<CR>")
+    map("n", "ga", "<Cmd>lua vim.lsp.buf.code_action()<CR>")
+    map("n", "gf", "<Cmd>lua vim.lsp.buf.format()<CR>")
+    map("n", "go", "<Cmd>lua vim.diagnostic.open_float()<CR>")
+    map("n", "<leader>go",
+      ":call utils#ToggleDiagnosticsOpenFloat()<CR> | :echom ('Toggle Diagnostics Float open/close...')<CR> | :sl! | echo ('')<CR>")
+    map("n", "gq", "<Cmd>lua vim.diagnostic.setloclist()<CR>")
+    map("n", "[d", "<Cmd>lua vim.diagnostic.goto_prev()<CR>")
+    map("n", "]d", "<Cmd>lua vim.diagnostic.goto_next()<CR>")
+    map("n", "gs", "<Cmd>lua vim.lsp.buf.document_symbol()<CR>")
+    map("n", "gw", "<Cmd>lua vim.lsp.buf.workspace_symbol()<CR>")
+    map("n", "<leader>wa", "<Cmd>lua vim.lsp.buf.add_workspace_folder()<CR>")
+    map("n", "<leader>wr", "<Cmd>lua vim.lsp.buf.remove_workspace_folder()<CR>")
+    map("n", "<leader>wl", function()
       print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
     end)
 
     -- TODO: Use the nicer new API for autocommands
-    cmd('augroup lsp_aucmds')
+    cmd("augroup lsp_aucmds")
     if client.server_capabilities.documentHighlightProvider then
-      cmd('au CursorHold <buffer> lua vim.lsp.buf.document_highlight()')
-      cmd('au CursorMoved <buffer> lua vim.lsp.buf.clear_references()')
+      cmd("au CursorHold <buffer> lua vim.lsp.buf.document_highlight()")
+      cmd("au CursorMoved <buffer> lua vim.lsp.buf.clear_references()")
     end
-    cmd('augroup END')
+    cmd("augroup END")
   end
 
   -- Toggle diagnostics visibility
@@ -130,11 +134,11 @@ if not vim.g.lsp_setup_done then
   ]])
 
   -- Suppress error messages from lang servers
-  vim.lsp.set_log_level('debug')
+  vim.lsp.set_log_level("debug")
   local capabilities = vim.lsp.protocol.make_client_capabilities()
-  capabilities = require('cmp_nvim_lsp').default_capabilities()
+  capabilities = require("cmp_nvim_lsp").default_capabilities()
   capabilities.textDocument.completion.completionItem.snippetSupport = true
-  capabilities.offsetEncoding = { 'utf-8', 'utf-16' }
+  capabilities.offsetEncoding = { "utf-8", "utf-16" }
 
   local function prefer_null_ls_fmt(client)
     client.server_capabilities.documentHighlightProvider = true
@@ -149,41 +153,44 @@ if not vim.g.lsp_setup_done then
     clangd = {
       on_attach = on_attach,
       capabilites = capabilities,
-      cmd = { 'clangd', '--offset-encoding=utf-16', '--cross-file-rename', '--header-insertion=never', '--suggest-missing-includes' },
+      cmd = { "clangd", "--offset-encoding=utf-16", "--cross-file-rename", "--header-insertion=never",
+        "--suggest-missing-includes" },
       init_options = {
         clangdFileStatus = true,
       },
       root_files = {
-        '.clangd',
-        '.clang-tidy',
-        '.clang-format',
-        'compile_commands.json',
-        'compile_flags.txt',
-        'configure.ac', -- AutoTools
+        ".clangd",
+        ".clang-tidy",
+        ".clang-format",
+        "compile_commands.json",
+        "compile_flags.txt",
+        "configure.ac", -- AutoTools
       },
     },
-    cssls = { filetypes = { 'css', 'scss', 'less', 'sass' }, root_dir = lspconfig.util.root_pattern('package.json', '.git') }, -- ghcide = {},
+    cssls = { filetypes = { "css", "scss", "less", "sass" },
+      root_dir = lspconfig.util.root_pattern("package.json", ".git") },                                                        -- ghcide = {},
     html = {},
-    jsonls = { prefer_null_ls = true, cmd = { '--stdio' } },
+    jsonls = { prefer_null_ls = true, cmd = { "--stdio" } },
     intelephense = {},
     julials = {
       on_new_config = function(new_config, _)
-        local julia = vim.fn.expand('~/.julia/environments/nvim-lspconfig/bin/julia')
+        local julia = vim.fn.expand("~/.julia/environments/nvim-lspconfig/bin/julia")
         if lspconfig.util.path.is_file(julia) then
           new_config.cmd[1] = julia
         end
       end,
       settings = { julia = { format = { indent = 2 } } },
     },
-    pyright = { settings = { python = { formatting = { provider = 'yapf' }, linting = { pytypeEnabled = true } } } },
+    pyright = { settings = { python = { formatting = { provider = "yapf" }, linting = { pytypeEnabled = true } } } },
     rust_analyzer = {
       settings = {
-        ['rust-analyzer'] = { cargo = { allFeatures = true }, checkOnSave = { command = 'clippy', extraArgs = { '--no-deps' } } },
+        ["rust-analyzer"] = { cargo = { allFeatures = true }, checkOnSave = { command = "clippy",
+          extraArgs = { "--no-deps" } } },
       },
     },
     dartls = {
-      cmd = { 'dart', 'language-server', '--protocol=lsp' },
-      filetypes = { 'dart' },
+      cmd = { "dart", "language-server", "--protocol=lsp" },
+      filetypes = { "dart" },
       init_options = {
         closingLabels = true,
         flutterOutline = true,
@@ -200,20 +207,20 @@ if not vim.g.lsp_setup_done then
       debounce_text_changes = 500,
       settings = {
         Lua = {
-          runtime = { version = 'LuaJIT', path = vim.split(package.path, ';') },
-          diagnostics = { enable = true, globals = { 'vim' } },
+          runtime = { version = "LuaJIT", path = vim.split(package.path, ";") },
+          diagnostics = { enable = true, globals = { "vim" } },
           workspace = { maxPreload = 2000, preloadFileSize = 50000, checkThirdParty = false },
         },
       },
     },
     sqlls = {},
     tsserver = {
-      capabilities = require('cmp_nvim_lsp').default_capabilities(vim.lsp.protocol.make_client_capabilities()),
+      capabilities = require("cmp_nvim_lsp").default_capabilities(vim.lsp.protocol.make_client_capabilities()),
       on_attach = function(client)
         client.server_capabilities.document_formatting = false
         client.server_capabilities.document_range_formatting = false
       end,
-      filetypes = { 'javascript', 'javascriptreact', 'javascript.jsx', 'typescript', 'typescriptreact', 'typescript.tsx' },
+      filetypes = { "javascript", "javascriptreact", "javascript.jsx", "typescript", "typescriptreact", "typescript.tsx" },
     },
     vimls = {},
     yamlls = {},
@@ -269,7 +276,7 @@ if not vim.g.lsp_setup_done then
 
   -- null_ls setup
   local builtins = null_ls.builtins
-  local augroup = vim.api.nvim_create_augroup('LspFormatting', {})
+  local augroup = vim.api.nvim_create_augroup("LspFormatting", {})
 
   -- local eslint_opts = {
   --  -- condition = function(utils)
@@ -299,10 +306,10 @@ if not vim.g.lsp_setup_done then
         update_in_insert = false,
         severity_sort = true,
       },
-      diagnostics_format = '[#{c}] #{m} (#{s})', -- this will run every time the source runs,
+      diagnostics_format = "[#{c}] #{m} (#{s})", -- this will run every time the source runs,
       -- so you should prefer caching results if possible
     }),
-    builtins.diagnostics.zsh.with({ filetypes = 'zsh', 'sh' }),
+    builtins.diagnostics.zsh.with({ filetypes = "zsh", "sh" }),
     builtins.diagnostics.todo_comments,
     builtins.diagnostics.teal,
     -- null_ls.builtins.diagnostics.vale,
@@ -313,44 +320,45 @@ if not vim.g.lsp_setup_done then
     builtins.diagnostics.flake8,
     builtins.diagnostics.eslint_d.with({
       condition = function(utils)
-        return utils.root_has_file('.eslintrc.json')
+        return utils.root_has_file(".eslintrc.json")
       end,
     }),
     builtins.formatting.eslint_d,
     -- null_ls.builtins.diagnostics.write_good.with { filetypes = { 'markdown', 'tex' } },
 
     -- Formatting
-    builtins.formatting.shfmt.with({ filetypes = { 'bash', 'zsh', 'sh' }, extra_args = { '-i', '2', '-ci' } }),
+    builtins.formatting.shfmt.with({ filetypes = { "bash", "zsh", "sh" }, extra_args = { "-i", "2", "-ci" } }),
     builtins.formatting.shellharden,
-    builtins.formatting.trim_whitespace.with({ filetypes = { 'tmux', 'teal', 'zsh' } }), -- builtins.formatting.beautysh,
-    builtins.formatting.beautysh.with({ filetypes = 'zsh' }),
+    builtins.formatting.trim_whitespace.with({ filetypes = { "tmux", "teal", "zsh" } }), -- builtins.formatting.beautysh,
+    builtins.formatting.beautysh.with({ filetypes = "zsh" }),
     builtins.formatting.clang_format.with({
-      filetypes = { 'c', 'cpp', 'cs', 'java', 'cuda', 'proto' },
+      filetypes = { "c", "cpp", "cs", "java", "cuda", "proto" },
       extra_args = {
-        '--style',
-        '{BasedOnStyle: Google, IndentWidth: 4, BreakBeforeBinaryOperators: NonAssignment, AllowShortFunctionsOnASingleLine: None}',
+        "--style",
+        "{BasedOnStyle: Google, IndentWidth: 4, BreakBeforeBinaryOperators: NonAssignment, AllowShortFunctionsOnASingleLine: None}",
       },
     }),
-    builtins.formatting.rustfmt,
+    --builtins.formatting.rustfmt,
     builtins.formatting.sql_formatter,
     -- null_ls.builtins.formatting.cmake_format,
     builtins.formatting.isort,
     builtins.formatting.htmlbeautifier, -- null_ls.builtins.formatting.prettier,
     builtins.formatting.prettierd,
     builtins.formatting.prettier.with({
-      filetypes = { 'javascript', 'javascriptreact', 'typescript', 'typescriptreact', 'json', 'yaml', 'markdown', 'html', 'css', 'scss', 'less', 'graphql', 'vue', 'svelte' },
-      extra_args = { '--single-quote', '--tab-width 4', '--print-width 200' },
+      filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact", "json", "yaml", "markdown", "html",
+        "css", "scss", "less", "graphql", "vue", "svelte" },
+      extra_args = { "--single-quote", "--tab-width 4", "--print-width 200" },
     }),
-    builtins.formatting.rustfmt,
     -- builtins.formatting.stylua,
     -- builtins.formatting.lua_format,
     builtins.formatting.stylua.with({
-      filetypes = { 'lua' },
-      command = 'stylua',
-      args = { '--quote_style', 'AutoPreferSingle', '--indent-width', '2', '--column-width', '160', '--indent-type', 'Spaces', '-' },
+      filetypes = { "lua" },
+      command = "stylua",
+      args = { "--quote_style", "AutoPreferSingle", "--indent-width", "2", "--column-width", "160", "--indent-type",
+        "Spaces", "-" },
     }),
     -- builtins.formatting.dart_format,
-    builtins.formatting.dart_format.with({ filetypes = { 'dart' } }),
+    builtins.formatting.dart_format.with({ filetypes = { "dart" } }),
     builtins.formatting.trim_whitespace,
     builtins.formatting.yapf,
     -- null_ls.builtins.formatting.black
@@ -378,9 +386,9 @@ if not vim.g.lsp_setup_done then
     sources = sources,
     update_in_insert = true,
     on_attach = function(client, bufnr)
-      if client.supports_method('textDocument/formatting') then
+      if client.supports_method("textDocument/formatting") then
         vim.api.nvim_clear_autocmds({ group = augroup, buffer = bufnr })
-        vim.api.nvim_create_autocmd('BufWritePre', {
+        vim.api.nvim_create_autocmd("BufWritePre", {
           group = augroup,
           buffer = bufnr,
           callback = function()
@@ -392,7 +400,7 @@ if not vim.g.lsp_setup_done then
   })
 
   -- Install all the null-ls sources using Mason
-  local registry = require('mason-registry')
+  local registry = require("mason-registry")
   for _, source_name in ipairs(sources) do
     local ok, pkg = pcall(registry.get_package, source_name)
     if ok then
@@ -413,17 +421,17 @@ if not vim.g.lsp_setup_done then
   --    end
   --  end
   -- end
-  vim.api.nvim_create_user_command('NullLsToggle', function()
+  vim.api.nvim_create_user_command("NullLsToggle", function()
     -- you can also create commands to disable or enable sources
-    require('null-ls').toggle({})
+    require("null-ls").toggle({})
   end, {})
 
   local null_ls_stop = function()
     local null_ls_client
-    local clients = require('user.mods').get_lsp_clients(bufnr)
+    local clients = require("user.mods").get_lsp_clients(bufnr)
 
     for _, client in ipairs(clients) do
-      if client.name == 'null-ls' then
+      if client.name == "null-ls" then
         null_ls_client = client
       end
     end
@@ -434,7 +442,7 @@ if not vim.g.lsp_setup_done then
     null_ls_client.stop()
   end
 
-  vim.api.nvim_create_user_command('NullLsStop', null_ls_stop, {})
+  vim.api.nvim_create_user_command("NullLsStop", null_ls_stop, {})
 
   vim.g.lsp_setup_done = true
 end
