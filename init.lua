@@ -100,6 +100,7 @@ local modules = {
   "plugins.notify",
   "plugins.overseer",
   "plugins.vimtex",
+  "plugins.indent-blankline",
   --"plugins.modify-blend",
 }
 
