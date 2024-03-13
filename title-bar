@@ -1,5 +1,24 @@
 #!/bin/bash
 
+# Lock file for preventing multiple instances
+lockfile="/tmp/title-bar.lock"
+
+# Check if the lock file exists and obtain the PID
+if [ -e "$lockfile" ]; then
+    # If the lock file exists, check if the process is still running
+    lock_pid=$(cat "$lockfile")
+    if ps -p "$lock_pid" >/dev/null; then
+        echo "title-bar is already running. Exiting."
+        exit 1
+    else
+        # If the process is not running, remove the stale lock file
+        rm "$lockfile"
+    fi
+fi
+
+# Create a new lock file with the current PID
+echo "$$" >"$lockfile"
+
 # Debug log file
 DEBUG_LOG="/tmp/title-bar_debug.log"
 
@@ -15,26 +34,7 @@ bg_path="/tmp/bg_${bgw}.png"
 
 # Function to create background images
 create_background_image() {
-    #    local bgw="$1"
-    #
-    #    debug_echo "Creating background image with size ${bgw}x13 and color #77dd77"
-    #
-    #    if [ ! -e "$bg_path" ]; then
-    #        convert -size "${bgw}"x13 xc:"#77dd77" "$bg_path" 2>>"$DEBUG_LOG"
-    #        convert_status=$?
-    #
-    #        if [ "$convert_status" -ne 0 ]; then
-    #            debug_echo "Error creating background image. Convert command exit status: $convert_status"
-    #        else
-    #            debug_echo "Background image created at: $bg_path"
-    #        fi
-    #    fi
-    local r="$1"
-    local g="$2"
-    local b="$3"
-    #echo -e "\e[48;2;${r};${g};${b}m"
-    echo -e "\e[48;2;119;221;119m"
-
+    echo -e "\e[48;2;255;165;0m" # Orange color
 }
 
 # Kill existing lemonbar instances and update script
@@ -42,7 +42,7 @@ pkill -f "lemonbar"
 pkill -f "update-title"
 
 # Get the focused window information
-focused_info="$(bspc query -T --names -d focused --node)"
+focused_info="$(bspc query -T --names -M)"
 
 # Get the focused window ID
 focused_id="$(bspc query -N -n focused)"
@@ -53,6 +53,13 @@ if [ "$focused_id" = "" ]; then
     exit
 fi
 
+# Check if the focused window is in fullscreen mode
+if bspc query -T -n "$focused_id" | grep -q '"state":"fullscreen"'; then
+    echo "Focused window is in fullscreen mode. Exiting."
+    rm -f "$lockfile" # Remove the lock file
+    exit
+fi
+
 # Get the WM_CLASS of the focused window
 focused_class="$(xprop WM_CLASS -id "$focused_id" | awk -F '"' '{print $2}')"
 
@@ -60,8 +67,9 @@ debug_echo "Focused Class: $focused_class"
 
 # Exclude certain window classes
 case "$focused_class" in
-    "Steam" | "Qmmp" | "Wrapper-1.0" | "xfce4-panel")
+    "Nwg-menu" | "nwg-menu" | "Steam" | "Qmmp" | "Wrapper-1.0" | "xfce4-panel")
         debug_echo "Excluded window class: $focused_class. Exiting script."
+        rm -f "$lockfile" # Remove the lock file
         exit
         ;;
 esac
@@ -74,20 +82,22 @@ read -r x y w h < <(xwininfo -id "$focused_id" |
        /Height:/ { h=$2 }
 END { print x, y, w, h }')
 
-geoBar=$(echo "$w 13 $x $y" | awk '{print $1+4"x13+"$3"+"$4-8}')
-#geoBar=$(echo "$w 10 $x $y" | awk '{print $1+4"x10+"$3"+"$4+2}')
+#geoBar=$(echo "$w 13 $x $y" | awk '{print $1+4"x13+"$3"+"$4-8}')
+#geoBar=$(echo "$w 13 $x $y" | awk '{print $1-7"x10+"$3+5"+"$4-4}')
+geoBar=$(echo "$w 13 $x $y" | awk '{print $1+7"x10+"$3"+"$4}')
 
 # Create background image based on window width
-create_background_image $(($w - 116))
+create_background_image
 
-# Launch lemonbar
-echo -e "%{c}%{I:${bg_path}:}%{l}%{I:$HOME/.scripts/assests/corner.png:}%{r}%{I:$HOME/.scripts/assests/corner.png:}" |
-lemonbar -d -p -B "$HOME/.scripts/assests/trans.png" -U "#77dd77" -F "#4e585d" -f "Terminus:size=1" -g "$geoBar" &
-#lemonbar -d -p -B "#77dd77" -U "#77dd77" -F "#4e585d" -f "Terminus:size=1" -g "$geoBar" &
+# Launch lemonbar with consistent background color
+echo -e "%{c}%{I:${bg_path}:}%{l}%{I#FF000000:$HOME/.scripts/assets/corner.png:}%{r}%{I:$HOME/.scripts/assets/corner.png:}" |
+lemonbar -d -p -B "#000000" -U "#FFFFFF" -F "#FFFFFF" -f "Jetbrains Mono:bold:size=10" -g "$geoBar" &
+#lemonbar -d -p -B "#FFFFFF" -U "#000000" -F "#000000" -f "Jetbrains Mono:bold:size=10" -g "$geoBar" &
+#lemonbar -d -p -B "$HOME/.scripts/assets/trans.png" -U "#77dd77" -F "#4e585d" -f "Terminus:size=1" -g "$geoBar" &
 sleep 0.05
 
 # Launch update-title for the focused window
-~/.scripts/update-title "$focused_id" | lemonbar -d -g "$geoBar" -f "Jetbrains Mono:size=6" -f "Jetbrains Mono:size=6" -p | bash &
+~/.scripts/update-title "$focused_id" | lemonbar -d -g "$geoBar" -f "Jetbrains Mono:bold:size=6" -f "Jetbrains Mono:bold:size=6" -p | bash &
 
 # Wait for lemonbar to start
 sleep 0.1
@@ -110,7 +120,7 @@ handle_bspwm_events() {
                 focused_node=$(echo "$line" | jq -r '.node')
                 ~/.scripts/update-title "$focused_node" | lemonbar -p -g "$geoBar" -f "Jetbrains Mono:size=6" -f "Jetbrains Mono:size=6" | bash &
                 ;;
-            node_add | node_remove | node_flag)
+            node_add | node_remove | node_flag | node_geometry)
                 # Handle other node-related events
                 ;;
             *)
@@ -122,3 +132,6 @@ handle_bspwm_events() {
 
 # Subscribe to BSPWM events and pass them to the handler function
 bspc subscribe | handle_bspwm_events &
+
+# Remove the lock file when the script exits
+trap 'rm -f "$lockfile"; pkill -f "title-bar"; exit 0' EXIT
