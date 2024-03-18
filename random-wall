@@ -1,0 +1,128 @@
+#!/bin/bash
+
+WPDIR="$HOME/pictures/wallpapers"
+LAST_WP_FILE="$HOME/.config/random-wall_last_wp.txt"
+CURRENT_WP_FILE="$HOME/.config/nitrogen/bg-saved.cfg"
+
+random=true
+apply=true
+wpfile=""
+
+function usage {
+    local stream exitcode
+    if [ "$1" -eq 1 ]; then
+        stream=2
+        exitcode=255
+    else
+        stream=1
+        exitcode=0
+    fi
+    echo "Usage: $(basename "$0") [-n|--noapply] [-h|--help] [wallpaper_location]" >&"$stream"
+    echo "If wallpaper location is not given, a random wallpaper from $WPDIR will be chosen" >&"$stream"
+    exit "$exitcode"
+}
+
+# Check if last wallpaper file exists and get its content
+if [ -f "$LAST_WP_FILE" ]; then
+    LAST_WP=$(<"$LAST_WP_FILE")
+else
+    LAST_WP=""
+fi
+
+# Function to get a random wallpaper from $WPDIR, excluding the last and current wallpapers
+function get_random_wallpaper {
+    local wallpapers
+    shopt -s nullglob
+    wallpapers=("$WPDIR"/*.jpg)
+    if [ ${#wallpapers[@]} -eq 0 ]; then
+        echo "No wallpapers found in $WPDIR" >&2
+        exit 1
+    fi
+
+    # If there is only one wallpaper, return it
+    if [ ${#wallpapers[@]} -eq 1 ]; then
+        echo "${wallpapers[0]}"
+        return
+    fi
+
+    local exclude=()
+    if [ "$LAST_WP" != "" ]; then
+        exclude+=("$LAST_WP")
+    fi
+    if [ "$CURRENT_WP" != "" ]; then
+        exclude+=("$CURRENT_WP")
+    fi
+
+    local random_wallpaper
+    while true; do
+        random_wallpaper="${wallpapers[RANDOM % ${#wallpapers[@]}]}"
+        if [[ ! " ${exclude[@]} " =~ " ${random_wallpaper} " ]]; then
+            echo "$random_wallpaper"
+            return
+        fi
+    done
+}
+
+# handle arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        "--help" | "-h")
+            usage 0
+            ;;
+        "--noapply" | "-n")
+            apply=false
+            ;;
+        *)
+            if ! "$random"; then
+                usage 1
+            elif [ ! -f "$1" ]; then
+                echo "File '$1' not found" >&2
+                exit 1
+            fi
+            random=false
+            wpfile="$1"
+            ;;
+    esac
+    shift
+done
+
+# Choose a random wallpaper if necessary
+if "$random"; then
+    wpfile=$(get_random_wallpaper)
+    echo "Chose: $wpfile" >&2
+fi
+
+# Set the desktop wallpaper
+cat >"$HOME/.config/nitrogen/bg-saved.cfg" <<EOF
+[xin_-1]
+file=$wpfile
+mode=4
+bgcolor=#000000
+EOF
+
+# Set the lock screen wallpaper
+"$HOME/.scripts/lockscreen-wallpaper" "$wpfile" &
+
+# Set the LightDM wallpaper
+cp "$wpfile" "/usr/share/lightdm-webkit/themes/glorious/assets/bg.jpg"
+
+# Save the last chosen wallpaper
+echo "$wpfile" >"$LAST_WP_FILE"
+
+# Sync wallpaper using AccountsService D-Bus
+if [ "$wpfile" != "" ]; then
+    dbus-send \
+        --print-reply \
+        --system \
+        --dest=org.freedesktop.Accounts \
+        /org/freedesktop/Accounts/User"$(id -u)" \
+        org.freedesktop.DBus.Properties.Set \
+        string:org.freedesktop.DisplayManager.AccountsService \
+        string:BackgroundFile \
+        variant:string:"$wpfile"
+fi
+
+# Apply the desktop wallpaper if requested
+if "$apply"; then
+    nitrogen --restore
+fi
