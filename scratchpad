@@ -60,5 +60,7 @@ if [ "$id" != "" ]; then
         # Scratchpad is hidden, show it and restore dimensions
         xdo show "$id"
         xdotool windowsize "$id" "$(echo "$dimensions" | tr ';' ' ')" 2>/dev/null
+        xdotool windowactivate "$id"
+        xdotool windowfocus "$id"
     fi
 fi
