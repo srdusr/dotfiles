@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Check if the desired session is provided as an argument
+if [ "$1" ]; then
+    case "$1" in
+        bspwm | sway | Hyprland)
+            echo "$1" >~/.session
+            echo "Session choice set to: $1"
+            ;;
+        *)
+            echo "Unsupported session: $1"
+            ;;
+    esac
+
+    # Kill the current X session or logout the user
+    pkill -KILL -u "$USER"
+else
+    echo "Usage: switch_session.sh <session_name>"
+    echo "Example: switch_session.sh bspwm"
+    exit 1
+fi
