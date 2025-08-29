@@ -1,0 +1,4 @@
+plugin/packer_compiled.lua
+startup.log
+tmp
+*.log
