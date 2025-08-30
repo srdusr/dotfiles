@@ -15,7 +15,7 @@
 Welcome, and make yourself at <b><i>$HOME</i></b>
 </h3>
 
-![1](assets/desktop.jpg)
+![1](common/assets/desktop.jpg)
 
 > NOTE: Primarily for Linux but currently under work to make this as agnostic/cross-platform as possible
 
