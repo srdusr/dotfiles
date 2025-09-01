@@ -1,10 +1,13 @@
 [user]
-	name = srdusr
-	email = trevorgray@srdusr.com
+    name =
+    email =
+
 [init]
 	defaultBranch = main
+
 [color]
 	ui = true
+
 [alias]
     graph = log --oneline --graph --decorate
 	ls = log --pretty=format:"%C(yellow)%h%Cred%d\\ %Creset%s%Cblue\\ [%cn]" --decorate
@@ -21,8 +24,9 @@
 
 
 [credential "https://github.com"]
-	helper = 
-	helper = !/usr/bin/gh auth git-credential
+	helper =
+	helper = !sh -c 'command -v gh >/dev/null 2>&1 && exec gh auth git-credential || exit 0'
+
 [credential "https://gist.github.com"]
-	helper = 
-	helper = !/usr/bin/gh auth git-credential
+	helper =
+	helper = !sh -c 'command -v gh >/dev/null 2>&1 && exec gh auth git-credential || exit 0'
