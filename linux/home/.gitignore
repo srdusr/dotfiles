@@ -1,5 +1,15 @@
+# Ignore .git directory
+.git/
+
+# Ignore git config
+.gitconfig
+
+# Ignore dotfiles dir
 .cfg
+
+# Ignore install.sh
 install.sh
+
 # Ignore Packer's compiled files
 packer_compiled.lua
 
@@ -11,9 +21,6 @@ zcompdump
 
 # Ignore .DS_Store files (macOS)
 *.DS_Store
-
-# Ignore .git directory
-.git/
 
 # Ignore .spl files
 *.spl
@@ -42,7 +49,10 @@ node_modules/
 # Ignore music directory
 ^music/
 
+# Ignore pictures/images directory
 ^images/
 ^pictures/
-^machines/
+
+# Ignore virtual machine directory
+^virt/
 
