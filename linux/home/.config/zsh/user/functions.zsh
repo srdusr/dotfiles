@@ -1,4 +1,263 @@
-## Function to temporarily unset GIT_WORK_TREE
+#if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
+#    # bare repo for staging remote-friendly structure
+#    _config() {
+#        git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
+#    }
+#
+#    # Determine OS
+#    case "$(uname -s)" in
+#        Linux) CFG_OS="linux" ;;
+#        Darwin) CFG_OS="macos" ;;
+#        MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
+#        *) CFG_OS="other" ;;
+#    esac
+#
+#    # Map local path to remote repo path
+#    _repo_path() {
+#        local f="$1"
+#
+#        # Already repo-relative
+#        case "$f" in
+#            linux/*|macos/*|windows/*|common/*|profile/*) echo "$f"; return ;;
+#        esac
+#
+#        # Absolute path outside home → OS root mirror
+#        if [[ "$f" = /* ]] && [[ "$f" != "$HOME"* ]]; then
+#            echo "$CFG_OS/${f#/}"
+#            return
+#        fi
+#
+#        # Home-relative → OS home
+#        [[ "$f" = "$HOME"* ]] && f="${f#$HOME/}"
+#        echo "$CFG_OS/home/$f"
+#    }
+#
+#    config() {
+#        local cmd="$1"; shift
+#        case "$cmd" in
+#            add)
+#                for f in "$@"; do
+#                    local repo_path="$(_repo_path "$f")"
+#                    local src="$f"
+#
+#                    # If user typed a relative path like .vi-mode, prepend $HOME
+#                    [[ "$src" != /* ]] && src="$HOME/$src"
+#
+#                    if [[ ! -e "$src" ]]; then
+#                        echo "File not found: $src"
+#                        continue
+#                    fi
+#
+#                    # Make parent dirs in bare repo for staging
+#                    mkdir -p "$HOME/.cfg/$(dirname "$repo_path")"
+#                    cp -a -- "$src" "$HOME/.cfg/$repo_path"
+#
+#                    # Stage in bare repo
+#                    _config add "$repo_path"
+#                done
+#                ;;
+#            deploy)
+#                for f in "$@"; do
+#                    local repo_path="$(_repo_path "$f")"
+#                    local sys_path
+#                    case "$repo_path" in
+#                        */home/*) sys_path="$HOME/${repo_path#*/home/}" ;;
+#                        *) sys_path="/${repo_path#$CFG_OS/}" ;;
+#                    esac
+#                    if [[ -e "$HOME/.cfg/$repo_path" ]]; then
+#                        echo "Deploying $repo_path → $sys_path"
+#                        sudo mkdir -p "$(dirname "$sys_path")"
+#                        sudo cp -a -- "$HOME/.cfg/$repo_path" "$sys_path"
+#                    else
+#                        echo "Not found in repo: $repo_path"
+#                    fi
+#                done
+#                ;;
+#            rm|mv)
+#                local mapped=()
+#                for f in "$@"; do
+#                    mapped+=("$(_repo_path "$f")")
+#                done
+#                _config "$cmd" "${mapped[@]}"
+#                ;;
+#            *)
+#                _config "$cmd" "$@"
+#                ;;
+#        esac
+#    }
+#
+#    # cache tracked files
+#    cfg_files=$(_config ls-tree --name-only -r HEAD 2>/dev/null)
+#    export CFG_FILES="$cfg_files"
+#fi
+
+
+if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
+    export CFG_STAGE="$HOME/.local/share/dotfiles-stage"
+    mkdir -p "$CFG_STAGE"
+
+    _config() {
+        git --git-dir="$HOME/.cfg" --work-tree="$CFG_STAGE" "$@"
+    }
+
+    case "$(uname -s)" in
+        Linux)   CFG_OS="linux" ;;
+        Darwin)  CFG_OS="macos" ;;
+        MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
+        *)       CFG_OS="other" ;;
+    esac
+
+    _repo_path() {
+        local f="$1"
+        case "$f" in
+            linux/*|macos/*|windows/*|common/*|profile/*) echo "$f"; return ;;
+        esac
+        [[ "$f" = "$HOME"* ]] && f="${f#$HOME/}"
+        echo "$CFG_OS/home/$f"
+    }
+
+    config() {
+        local cmd="$1"; shift
+        case "$cmd" in
+            add)
+                for f in "$@"; do
+                    local repo_path="$(_repo_path "$f")"
+                    local src="$f"
+                    [[ "$src" != /* ]] && src="$HOME/$src"
+                    if [[ ! -e "$src" ]]; then
+                        echo "File not found: $src"
+                        continue
+                    fi
+                    mkdir -p "$CFG_STAGE/$repo_path"
+                    cp -a -- "$src/." "$CFG_STAGE/$repo_path/"
+                    _config add "$repo_path"
+                done
+                ;;
+            deploy)
+                for f in "$@"; do
+                    local repo_path="$(_repo_path "$f")"
+                    local sys_path
+                    case "$repo_path" in
+                        */home/*) sys_path="$HOME/${repo_path#*/home/}" ;;
+                        *) sys_path="/${repo_path#$CFG_OS/}" ;;
+                    esac
+                    if [[ -e "$CFG_STAGE/$repo_path" ]]; then
+                        echo "Deploying $repo_path → $sys_path"
+                        sudo mkdir -p "$(dirname "$sys_path")"
+                        sudo cp -a -- "$CFG_STAGE/$repo_path" "$sys_path"
+                    else
+                        echo "Not found in repo: $repo_path"
+                    fi
+                done
+                ;;
+            pull-safe)
+              # Pull without overwriting local changes
+              _config fetch origin
+              _config merge -X ours origin/main
+              ;;
+            *)
+                _config "$cmd" "$@"
+                ;;
+        esac
+    }
+
+    cfg_files=$(_config ls-tree --name-only -r HEAD 2>/dev/null)
+    export CFG_FILES="$cfg_files"
+fi
+
+
+
+# Git
+## Use gh instead of git (fast GitHub command line client).
+#if type gh >/dev/null; then
+#  alias git=gh
+#  if type compdef >/dev/null 2>/dev/null; then
+#     compdef gh=git
+#  fi
+#fi
+#check_gh_installed() {
+#    if command -v gh &> /dev/null; then
+#        return 0  # gh is installed
+#    else
+#        return 1  # gh is not installed
+#    fi
+#}
+#
+## Set alias for git to gh if gh is installed
+#if check_gh_installed; then
+#    alias git=gh
+#fi
+
+# No arguments: `git status`
+# With arguments: acts like `git`
+g() {
+    if [ $# -gt 0 ]; then
+        git "$@"           # If arguments are provided, pass them to git
+    else
+        git status        # Otherwise, show git status
+    fi
+}
+
+# Complete g like git
+compdef g=git
+
+# Git alias commands
+ga() { g add "$@"; }                   # ga: Add files to the staging area
+gaw() { g add -A && g diff --cached -w | g apply --cached -R; }   # gaw: Add all changes to the staging area and unstage whitespace changes
+grm() { g rm "$@"; }
+gb() { g branch "$@"; }                # gb: List branches
+gbl() { g branch -l "$@"; }            # gbl: List local branches
+gbD() { g branch -D "$@"; }            # gbD: Delete a branch
+gbu() { g branch -u "$@"; }            # gbu: Set upstream branch
+ge() { g clone "$@"; }
+gc() { g commit "$@"; }                # gc: Commit changes
+gcm() { g commit -m "$@"; }            # gcm: Commit with a message
+gca() { g commit -a "$@"; }            # gca: Commit all changes
+gcaa() { g commit -a --amend "$@"; }   # gcaa: Amend the last commit
+gcam() { g commit -a -m "$@"; }        # gcam: Commit all changes with a message
+gce() { g commit -e "$@"; }            # gce: Commit with message and allow editing
+gcfu() { g commit --fixup "$@"; }      # gcfu: Commit fixes in the context of the previous commit
+gco() { g checkout "$@"; }             # gco: Checkout a branch or file
+gcob() { g checkout -b "$@"; }         # gcob: Checkout a new branch
+gcoB() { g checkout -B "$@"; }         # gcoB: Checkout a new branch, even if it exists
+gcp() { g cherry-pick "$@"; }          # gcp: Cherry-pick a commit
+gcpc() { g cherry-pick --continue "$@"; }  # gcpc: Continue cherry-picking after resolving conflicts
+gd() { g diff "$@"; }                  # gd: Show changes
+#gd^() { g diff HEAD^ HEAD "$@"; }      # gd^: Show changes between HEAD^ and HEAD
+gds() { g diff --staged "$@"; }        # gds: Show staged changes
+gl() { g lg "$@"; }                    # gl: Show a customized log
+glg() { g log --graph --decorate --all "$@"; }   # glg: Show a customized log with graph
+gls() {                                # Query `glog` with regex query.
+    query="$1"
+    shift
+    glog --pickaxe-regex "-S$query" "$@"
+}
+gdc() { g diff --cached "$@"; }        # gdc: Show changes between the working directory and the index
+gu() { g pull "$@"}                    # gu: Pull
+gp() { g push "$@"}                    # gp: Push
+gpom() { g push origin main "$@"; }  # gpom: Push changes to origin main
+gr() { g remote "$@"; }                # gr: Show remote
+gra() { g rebase --abort "$@"; }       # gra: Abort a rebase
+grb() { g rebase --committer-date-is-author-date "$@"; }   # grb: Rebase with the author date preserved
+grbom() { grb --onto master "$@"; }    # grbom: Rebase onto master
+grbasi() { g rebase --autosquash --interactive "$@"; }    # grbasi: Interactive rebase with autosquash
+grc() { g rebase --continue "$@"; }    # grc: Continue a rebase
+grs() { g restore --staged "$@"; }     # grs: Restore changes staged for the next commit
+grv() { g remote -v "$@"; }            # grv: Show remote URLs after each name
+grh() { g reset --hard "$@"; }         # grh: Reset the repository and the working directory
+grH() { g reset HEAD "$@"; }           # grH: Reset the index but not the working directory
+#grH^() { g reset HEAD^ "$@"; }         # grH^: Reset the index and working directory to the state of the HEAD's first parent
+gs() { g status -sb "$@"; }            # gs: Show the status of the working directory and the index
+gsd() { g stash drop "$@"; }           # gsd: Drop a stash
+gsl() { g stash list --date=relative "$@"; }   # gsl: List all stashes
+gsp() { g stash pop "$@"; }            # gsp: Apply and remove a single stash
+gss() { g stash show "$@"; }           # gss: Show changes recorded in the stash as a diff
+gst() { g status "$@"; }               # gst: Show the status of the working directory and the index
+gsu() { g standup "$@"; }              # gsu: Customized standup command
+gforgotrecursive() { g submodule update --init --recursive --remote "$@"; }   # gforgotrecursive: Update submodules recursively
+gfp() { g commit --amend --no-edit && g push --force-with-lease "$@"; }      # gfp: Amending the last commit and force-pushing
+
+# Temporarily unset GIT_WORK_TREE
 function git_without_work_tree() {
     # Only proceed if a git command is being run
     if [ "$1" = "git" ]; then
@@ -21,44 +280,34 @@ function git_without_work_tree() {
 }
 
 # Set alias conditionally
-alias git='git_without_work_tree git'
+#alias git='git_without_work_tree git'
 
 # Set bare dotfiles repository git environment variables dynamically
 function set_git_env_vars() {
-    # Check if the current command is a package manager command
+    # Do nothing unless ~/.cfg exists and is a bare git repo
+    [[ -d "$HOME/.cfg" ]] || return
+    git --git-dir="$HOME/.cfg" rev-parse --is-bare-repository &>/dev/null || return
+
+    # Skip if last command was a package manager
     if [[ "${(%)${(z)history[1]}}" =~ ^(pacman|yay|apt|dnf|brew|npm|pip|gem|go|cargo) ]]; then
         return
     fi
-    local git_dir="$(git rev-parse --git-dir -C . 2>/dev/null)"
-    if [[ -n "$git_dir" ]]; then
-        local is_bare="$(git -C "$git_dir" rev-parse --is-bare-repository 2>/dev/null)"
-        if [[ "$is_bare" == "true" ]]; then
-            export GIT_DIR="$HOME/.cfg"
-            export GIT_WORK_TREE=$(realpath $(eval echo ~))
-        else
-            unset GIT_DIR
-            unset GIT_WORK_TREE
-        fi
+
+    # Only set env vars if not already inside another Git repo
+    if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+        export GIT_DIR="$HOME/.cfg"
+        export GIT_WORK_TREE="$(realpath ~)"
     else
-        local root_dir="$(git rev-parse --show-toplevel 2>/dev/null)"
-        if [[ -n "$root_dir" ]]; then
-            unset GIT_DIR
-            export GIT_WORK_TREE="$root_dir"
-        else
-            export GIT_DIR="$HOME/.cfg"
-            export GIT_WORK_TREE=$(realpath $(eval echo ~))
-        fi
+        unset GIT_DIR
+        unset GIT_WORK_TREE
     fi
 }
 
-# Define an auto_cd hook to automatically update Git environment variables
-#function chpwd() {
-#    set_git_env_vars
-#}
-# Call the function to set Git environment variables when the shell starts up
+# Hook and initial call
+function chpwd() { set_git_env_vars }
 set_git_env_vars
 
-
+# Git Subtrees
 function gsp() {
     # Config file for subtrees
     #
@@ -108,13 +357,88 @@ getlast () {
     fc -nl $((HISTCMD - 1))
 }
 
-# Enter directory and list contents
-#cd() { builtin cd $@ && lsd }
-cd() {
-    if [ -n "$1" ]; then
-        builtin cd "$@" && ls
+# Copy the current command to a file
+copy_command_to_file() {
+    # Only write the last command if BUFFER is not empty
+    if [[ -n "$BUFFER" ]]; then
+        echo "$BUFFER" > ~/command_log.txt  # Overwrite with the latest command
     else
-        builtin cd ~ && ls
+        # If the buffer is empty, remove the previous log file
+        command rm -f ~/command_log.txt  # Optionally remove the log if no command is present
+    fi
+}
+
+# Display the latest command from the log in the user input
+display_latest_command() {
+    if [[ -f ~/command_log.txt ]]; then
+        # Read the last command from the log
+        local last_command
+        last_command=$(< ~/command_log.txt)
+
+        # Only display if the last command is not empty
+        if [[ -n "$last_command" ]]; then
+            BUFFER="$last_command"  # Set the BUFFER to the last command
+            CURSOR=${#BUFFER}       # Set the cursor to the end of the command
+        fi
+    fi
+    zle reset-prompt            # Refresh the prompt
+}
+
+# Go up a directory
+go_up() {
+    copy_command_to_file  # Copy the current command to a file
+    BUFFER=""             # Clear the current command line
+    cd .. || return       # Change directory and return if it fails
+    display_latest_command # Display the latest command in the user input
+}
+
+# Initialize a variable to store the previous directory
+previous_dir=""
+
+# Function to change directories
+go_into() {
+    copy_command_to_file  # Copy the current command to a file
+
+    # Use fzf or another tool to choose the directory
+    local dir
+    dir=$( (ls -d */; echo "Go Last directory:") | fzf --height 40% --reverse --tac)  # Include previous directory as an option
+
+    if [[ -n "$dir" ]]; then
+        # Check if the user selected the previous directory
+        if [[ "$dir" == Previous:* ]]; then
+            cd - || return  # Change to the previous directory
+        else
+            cd "${dir%/}" || return  # Change directory if a selection is made (remove trailing slash)
+        fi
+
+        # Save the current directory to previous_dir
+        previous_dir=$(pwd)  # Update previous_dir to current directory after changing
+        BUFFER=""             # Clear the current command line
+        display_latest_command # Display the last command if available
+    fi
+}
+
+# Register functions as ZLE widgets
+zle -N go_up
+zle -N go_into
+
+
+
+
+# Enter directory and list contents
+function cd-clear-ls() {
+    if [ -n "$1" ]; then
+        builtin cd "$@" 2>/dev/null || { echo "cd: no such file or directory: $1"; return 1; }
+    else
+        builtin cd ~ || return 1
+    fi
+
+    echo -e "\033[H\033[J"  # Clear screen but keep scroll buffer
+
+    if [ "$PWD" != "$HOME" ] && git rev-parse --is-inside-work-tree &>/dev/null; then
+        ls -a
+    else
+        ls
     fi
 }
 
@@ -453,6 +777,63 @@ ssh-create() {
     fi
 }
 
+guest() {
+  local guest="$1"
+  shift
+
+  local port
+  if [[ "$#" -ge 2 && "${@: -1}" =~ ^[0-9]+$ ]]; then
+    port="${@: -1}"
+    set -- "${@:1:$(($#-1))}"
+  fi
+
+  if [[ -z "$guest" || "$#" -lt 1 ]]; then
+    echo "Send file(s) or directories to remote machine"
+    echo "Usage: guest <guest-alias> <file-or-directory>... [port]"
+    return 1
+  fi
+
+  # Auto-detect port
+  if [[ -z "$port" ]]; then
+    if nc -z localhost 22220 2>/dev/null; then
+      port=22220
+    elif nc -z localhost 22 2>/dev/null; then
+      port=22
+    else
+      echo "No known SSH port (22220 or 22) is open. Specify a port manually."
+      return 1
+    fi
+  fi
+
+  for src in "$@"; do
+    src="${src/#\~/$HOME}"
+    if [[ ! -e "$src" ]]; then
+      echo "Error: '$src' does not exist."
+      continue
+    fi
+
+    local abs_path dest_dir rel_dir rsync_src rsync_dest
+
+    abs_path=$(realpath "$src")
+    rel_dir="${abs_path#$HOME/}"
+    dest_dir=$(dirname "$rel_dir")
+
+    # Ensure target dir exists remotely
+    ssh -p "$port" "$guest" "mkdir -p ~/$dest_dir"
+
+    if [[ -d "$src" ]]; then
+      # Add trailing slash to copy contents instead of nesting the dir
+      rsync_src="${src%/}/"
+      rsync_dest="~/$rel_dir/"
+    else
+      rsync_src="$src"
+      rsync_dest="~/$dest_dir/"
+    fi
+
+    echo "Sending '$src' to '$guest:$rsync_dest'..."
+    rsync -avz -e "ssh -p $port" "$rsync_src" "$guest:$rsync_dest"
+  done
+}
 historystat() {
     history 0 | awk '{print $2}' | sort | uniq -c | sort -n -r | head
 }
@@ -597,18 +978,6 @@ getstate () {
     . ~/environment.tmp
 }
 
-# use ctrl-z to toggle in and out of bg
-function toggle_fg_bg() {
-    if [[ $#BUFFER -eq 0 ]]; then
-        BUFFER="fg"
-        zle accept-line
-    else
-        BUFFER=""
-        zle clear-screen
-    fi
-}
-zle -N toggle_fg_bg
-bindkey '^Z' toggle_fg_bg
 
 # Tmux layout
 openSession () {
@@ -636,13 +1005,15 @@ compress() {
     fi
 }
 
-# archive extract
 extract() {
     if [[ -f "$1" ]] ; then
-        local filename=$(basename "$1")
-        local foldername=${filename%%.*}
-        local fullpath=$(perl -e 'use Cwd "abs_path";print abs_path(shift)' "$1")
+        local filename
+        filename=$(basename "$1")
+        local foldername="${filename%%.*}"
+        local fullpath
+        fullpath=$(perl -e 'use Cwd "abs_path";print abs_path(shift)' "$1")
         local didfolderexist=false
+
         if [[ -d "$foldername" ]]; then
             didfolderexist=true
             read -p "$foldername already exists, do you want to overwrite it? (y/n) " -n 1
@@ -651,24 +1022,29 @@ extract() {
                 return
             fi
         fi
-        mkdir -p "$foldername" && cd "$foldername"
+
+        mkdir -p "$foldername" && cd "$foldername" || return
+
         case "$1" in
             *.tar.bz2) tar xjf "$fullpath" ;;
-            *.tar.gz) tar xzf "$fullpath" ;;
-            *.tar.xz) tar Jxvf "$fullpath" ;;
-            *.tar.Z) tar xzf "$fullpath" ;;
-            *.tar) tar xf "$fullpath" ;;
-            *.taz) tar xzf "$fullpath" ;;
-            *.tb2) tar xjf "$fullpath" ;;
-            *.tbz) tar xjf "$fullpath" ;;
-            *.tbz2) tar xjf "$fullpath" ;;
-            *.tgz) tar xzf "$fullpath" ;;
-            *.txz) tar Jxvf "$fullpath" ;;
-            *.zip) unzip "$fullpath" ;;
-            *) echo "'$1' cannot be extracted via extract()" \
+            *.tar.gz)  tar xzf "$fullpath" ;;
+            *.tar.xz)  tar Jxf "$fullpath" ;;
+            *.tar.Z)   tar xzf "$fullpath" ;;
+            *.tar)     tar xf "$fullpath" ;;
+            *.taz)     tar xzf "$fullpath" ;;
+            *.tb2)     tar xjf "$fullpath" ;;
+            *.tbz)     tar xjf "$fullpath" ;;
+            *.tbz2)    tar xjf "$fullpath" ;;
+            *.tgz)     tar xzf "$fullpath" ;;
+            *.txz)     tar Jxf "$fullpath" ;;
+            *.rar)     unrar x -o+ "$fullpath" >/dev/null ;;
+            *.zip)     unzip -o "$fullpath" ;;
+            *)
+                echo "'$1' cannot be extracted via extract()" \
                 && cd .. \
                 && ! "$didfolderexist" \
-                && rm -r "$foldername" ;;
+                && rm -r "$foldername"
+                ;;
         esac
     else
         echo "'$1' is not a valid file"
@@ -722,92 +1098,314 @@ trash() {
     esac
 }
 
-# Git
-## Use gh instead of git (fast GitHub command line client).
-#if type gh >/dev/null; then
-#  alias git=gh
-#  if type compdef >/dev/null 2>/dev/null; then
-#     compdef gh=git
-#  fi
-#fi
-#check_gh_installed() {
-#    if command -v gh &> /dev/null; then
-#        return 0  # gh is installed
-#    else
-#        return 1  # gh is not installed
-#    fi
-#}
-#
-## Set alias for git to gh if gh is installed
-#if check_gh_installed; then
-#    alias git=gh
-#fi
+what() {
+    type "$1"
+    echo "$PATH"
+}
 
-# No arguments: `git status`
-# With arguments: acts like `git`
-g() {
-    if [ $# -gt 0 ]; then
-        git "$@"           # If arguments are provided, pass them to git
+shutdown() {
+    if [ "$#" -eq 0 ]; then
+        sudo /sbin/shutdown -h now
     else
-        git status        # Otherwise, show git status
+        sudo /sbin/shutdown -h "$@"
     fi
 }
 
-# Complete g like git
-compdef g=git
+windowManagerName () {
+    local window=$(
+        xprop -root -notype
+    )
 
-# Define functions for common Git commands
-ga() { g add "$@"; }                   # ga: Add files to the staging area
-gaw() { g add -A && g diff --cached -w | g apply --cached -R; }   # gaw: Add all changes to the staging area and unstage whitespace changes
-grm() { g rm "$@"; }
-gb() { g branch "$@"; }                # gb: List branches
-gbl() { g branch -l "$@"; }            # gbl: List local branches
-gbD() { g branch -D "$@"; }            # gbD: Delete a branch
-gbu() { g branch -u "$@"; }            # gbu: Set upstream branch
-ge() { g clone "$@"; }
-gc() { g commit "$@"; }                # gc: Commit changes
-gcm() { g commit -m "$@"; }            # gcm: Commit with a message
-gca() { g commit -a "$@"; }            # gca: Commit all changes
-gcaa() { g commit -a --amend "$@"; }   # gcaa: Amend the last commit
-gcam() { g commit -a -m "$@"; }        # gcam: Commit all changes with a message
-gce() { g commit -e "$@"; }            # gce: Commit with message and allow editing
-gcfu() { g commit --fixup "$@"; }      # gcfu: Commit fixes in the context of the previous commit
-gco() { g checkout "$@"; }             # gco: Checkout a branch or file
-gcob() { g checkout -b "$@"; }         # gcob: Checkout a new branch
-gcoB() { g checkout -B "$@"; }         # gcoB: Checkout a new branch, even if it exists
-gcp() { g cherry-pick "$@"; }          # gcp: Cherry-pick a commit
-gcpc() { g cherry-pick --continue "$@"; }  # gcpc: Continue cherry-picking after resolving conflicts
-gd() { g diff "$@"; }                  # gd: Show changes
-#gd^() { g diff HEAD^ HEAD "$@"; }      # gd^: Show changes between HEAD^ and HEAD
-gds() { g diff --staged "$@"; }        # gds: Show staged changes
-gl() { g lg "$@"; }                    # gl: Show a customized log
-glg() { g log --graph --decorate --all "$@"; }   # glg: Show a customized log with graph
-gls() {                                # Query `glog` with regex query.
-  query="$1"
-  shift
-  glog --pickaxe-regex "-S$query" "$@"
+    local identifier=$(
+        echo "${window}" |
+        awk '$1=="_NET_SUPPORTING_WM_CHECK:"{print $5}'
+    )
+
+    local attributes=$(
+        xprop -id "${identifier}" -notype -f _NET_WM_NAME 8t
+    )
+
+    local name=$(
+        echo "${attributes}" |
+        grep "_NET_WM_NAME = " |
+        cut --delimiter=' ' --fields=3 |
+        cut --delimiter='"' --fields=2
+    )
+
+    echo "${name}"
 }
-gdc() { g diff --cached "$@"; }        # gdc: Show changes between the working directory and the index
-gu() { g pull "$@"}                    # gu: Pull
-gp() { g push "$@"}                    # gp: Push
-gpom() { g push origin main "$@"; }  # gpom: Push changes to origin main
-gr() { g remote "$@"; }                # gr: Show remote
-gra() { g rebase --abort "$@"; }       # gra: Abort a rebase
-grb() { g rebase --committer-date-is-author-date "$@"; }   # grb: Rebase with the author date preserved
-grbom() { grb --onto master "$@"; }    # grbom: Rebase onto master
-grbasi() { g rebase --autosquash --interactive "$@"; }    # grbasi: Interactive rebase with autosquash
-grc() { g rebase --continue "$@"; }    # grc: Continue a rebase
-grs() { g restore --staged "$@"; }     # grs: Restore changes staged for the next commit
-grv() { g remote -v "$@"; }            # grv: Show remote URLs after each name
-grh() { g reset --hard "$@"; }         # grh: Reset the repository and the working directory
-grH() { g reset HEAD "$@"; }           # grH: Reset the index but not the working directory
-#grH^() { g reset HEAD^ "$@"; }         # grH^: Reset the index and working directory to the state of the HEAD's first parent
-gs() { g status -sb "$@"; }            # gs: Show the status of the working directory and the index
-gsd() { g stash drop "$@"; }           # gsd: Drop a stash
-gsl() { g stash list --date=relative "$@"; }   # gsl: List all stashes
-gsp() { g stash pop "$@"; }            # gsp: Apply and remove a single stash
-gss() { g stash show "$@"; }           # gss: Show changes recorded in the stash as a diff
-gst() { g status "$@"; }               # gst: Show the status of the working directory and the index
-gsu() { g standup "$@"; }              # gsu: Customized standup command
-gforgotrecursive() { g submodule update --init --recursive --remote "$@"; }   # gforgotrecursive: Update submodules recursively
-gfp() { g commit --amend --no-edit && g push --force-with-lease "$@"; }      # gfp: Amending the last commit and force-pushing
+
+logout() {
+    local wm
+    wm="$(windowManagerName)"
+    if [[ -n "$wm" ]]; then
+        echo "Logging out by killing window manager: $wm"
+        pkill "$wm"
+    else
+        echo "No window manager detected!" >&2
+    fi
+}
+
+# Gentoo
+emg() {
+  if [[ -z "$1" ]]; then
+    echo "Usage: emg [USE_FLAGS] package [package...]"
+    return 1
+  fi
+
+  if [[ "$1" =~ ^[^-].* ]]; then
+    local use_flags="$1"
+    shift
+    sudo USE="$use_flags" emerge -av "$@"
+  else
+    sudo emerge -av "$@"
+  fi
+}
+
+# Remove command from history
+forget () { # Accepts one history line number as argument or search term
+  if [[ -z "$1" ]]; then
+    echo "Usage: hist <history_number> | hist -s <search_term>"
+    return 1
+  fi
+
+  if [[ "$1" == "-s" ]]; then
+    if [[ -z "$2" ]]; then
+      echo "Usage: hist -s <search_term>"
+      return 1
+    fi
+
+    local search_term="$2"
+
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+      LC_ALL=C sed -i "/${search_term}/d" "$HISTFILE"  # GNU sed
+    else
+      LC_ALL=C sed -i '' "/${search_term}/d" "$HISTFILE"  # BSD/macOS sed
+    fi
+
+    fc -R "$HISTFILE"
+    echo "Deleted all history entries matching '$search_term'."
+  else
+    local num=$1
+    local cmd=$(fc -ln $num $num 2>/dev/null)
+
+    if [[ -z "$cmd" ]]; then
+      echo "No history entry found for index $num"
+      return 1
+    fi
+
+    history -d $num
+
+    local escaped_cmd=$(echo "$cmd" | sed 's/[\/&]/\\&/g')
+
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+      LC_ALL=C sed -i "/${escaped_cmd}/d" "$HISTFILE"
+    else
+      LC_ALL=C sed -i '' "/${escaped_cmd}/d" "$HISTFILE"
+    fi
+
+    fc -R "$HISTFILE"
+    echo "Deleted '$cmd' from history."
+  fi
+}
+
+# Remove hist command itself
+remove_hist_command() {
+ [[ $1 != 'hist '* ]]
+}
+
+remove_hist_command
+
+
+search() {
+    # Search for a pattern in the specified directory (non-recursive).
+    dir="${1:-.}"
+    ls -1 "$dir" | grep -i "$2"
+}
+
+deepsearch() {
+    # Perform a recursive search for a pattern in the specified directory.
+    dir="${1:-.}"
+    find "$dir" -iname "$2"
+}
+
+notes() {
+    local base_dir="$HOME/documents/main/"
+
+    if [[ -z "$1" ]]; then
+        # No argument → cd to notes directory
+        cd "$base_dir" || return
+        return
+    fi
+
+    local target="$1"  # The argument itself
+
+    # Use find to check if the file exists anywhere in the base directory
+    local found_files=($(find "$base_dir" -type f -name "$target"))
+
+    if [[ ${#found_files[@]} -eq 1 ]]; then
+        # Only one match found, open it directly
+        $EDITOR "${found_files[0]}"
+    elif [[ ${#found_files[@]} -gt 1 ]]; then
+        # Multiple files found, prompt the user to select one
+        echo "Multiple files found for '$target'. Please choose one:"
+        PS3="Please enter a number to select a file (1-${#found_files[@]}): "
+        select selected_file in "${found_files[@]}"; do
+            if [[ -n "$selected_file" ]]; then
+                $EDITOR "$selected_file"
+                break
+            else
+                echo "Invalid selection, try again."
+            fi
+        done
+    else
+        # If no match found, search for a directory
+        local found_dir=$(find "$base_dir" -type d -name "$target" -print -quit)
+
+        if [[ -n "$found_dir" ]]; then
+            # Directory found, cd into it
+            cd "$found_dir" || return
+        else
+            # If no match found, create the file and open it
+            local full_target="$base_dir/$target"
+            mkdir -p "$(dirname "$full_target")"
+            $EDITOR "$full_target"
+        fi
+    fi
+}
+
+# Enable tab completion for files and directories
+_notes_complete() {
+    local base_dir="$HOME/documents/main"
+    compadd -o nospace -- $(find "$base_dir" -type f -o -type d -printf '%P\n')
+}
+
+compdef _notes_complete notes
+
+
+ship() {
+  local binary_dir="$HOME/.local/share"
+  local bin_symlink_dir="$HOME/.local/bin"
+  local project_dirs=(
+    "$HOME/projects/"
+    "$HOME/src/"
+    "$HOME/src/site/"
+  )
+
+  mkdir -p "$binary_dir" "$bin_symlink_dir"
+
+  local project_dir=""
+
+  if [[ -n "$1" ]]; then
+    # Project name specified
+    for dir in "${project_dirs[@]}"; do
+      if [[ -d "$dir/$1" ]]; then
+        project_dir="$dir/$1"
+        break
+      fi
+    done
+
+    if [[ -z "$project_dir" ]]; then
+      echo "Project '$1' not found."
+      return 1
+    fi
+  else
+    # No argument: pick latest edited
+    local bin_file
+    bin_file=$(find "${project_dirs[@]}" -type f -name "Cargo.toml" -exec stat --format="%Y %n" {} \; 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2-)
+
+    if [[ -z "$bin_file" ]]; then
+      echo "No Cargo.toml found."
+      return 1
+    fi
+
+    project_dir=$(dirname "$bin_file")
+  fi
+
+  cd "$project_dir" || return
+  echo "Building project in $project_dir..."
+
+  # Build it
+  cargo build --release || { echo "Build failed"; return 1; }
+
+  # Assume binary has same name as project dir
+  local binary_name
+  binary_name=$(basename "$project_dir")
+  local built_binary="target/release/$binary_name"
+
+  if [[ -x "$built_binary" ]]; then
+    echo "Copying $built_binary to $binary_dir/$binary_name"
+    cp "$built_binary" "$binary_dir/$binary_name"
+
+    # Create/Update symlink
+    local symlink_path="$bin_symlink_dir/$binary_name"
+    ln -sf "$binary_dir/$binary_name" "$symlink_path"
+
+    echo "Binary is now at: $binary_dir/$binary_name"
+    echo "Symlink created at: $symlink_path"
+  else
+    echo "Built binary not found: $built_binary"
+    echo "You may need to manually specify the output binary."
+  fi
+}
+
+
+forge() {
+
+  local install=no
+  local usage="Usage: forge [--install]"
+
+  # Handle --install flag
+  if [[ "$1" == "--install" ]]; then
+    install=yes
+    shift
+  elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    echo "$usage"
+    return 0
+  fi
+
+  if [[ -f "CMakeLists.txt" ]]; then
+    echo "📦 CMake project detected"
+    [[ ! -d build ]] && mkdir build
+    cmake -B build -DCMAKE_BUILD_TYPE=Release || return 1
+    cmake --build build || return 1
+    [[ "$install" == "yes" ]] && sudo cmake --install build
+
+  elif [[ -f "meson.build" ]]; then
+    echo "📦 Meson project detected"
+    if [[ ! -d build ]]; then
+      meson setup build || return 1
+    fi
+    ninja -C build || return 1
+    [[ "$install" == "yes" ]] && sudo ninja -C build install
+
+  elif [[ -f "Makefile" ]]; then
+    echo "📦 Makefile project detected"
+    # Try `make all`, fallback to `make` if `all` fails
+    if make -q all 2>/dev/null; then
+      make all || return 1
+    else
+      make || return 1
+    fi
+    [[ "$install" == "yes" ]] && sudo make install
+
+  else
+    echo "❌ No supported build system found."
+    return 1
+  fi
+}
+
+windows_home() {
+  for dir in /mnt/windows/Users/*(N); do
+    base=${dir:t}   # `:t` is zsh's "tail" = basename
+    if [[ -d $dir && ! $base =~ ^(All Users|Default|Default User|Public|nx|desktop.ini)$ ]]; then
+      echo "$dir"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if winhome_path=$(windows_home); then
+  hash -d winhome="$winhome_path"
+fi

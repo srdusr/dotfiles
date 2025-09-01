@@ -23,16 +23,34 @@ accept-and-complete-next-history() {
     zle expand-or-complete-prefix
 }
 zle -N accept-and-complete-next-history
-bindkey -M menuselect '^i' accept-and-complete-next-history
+#bindkey -M menuselect '^i' accept-and-complete-next-history
 bindkey '^n' expand-or-complete
 bindkey '^p' reverse-menu-complete
+#bindkey '^I' expand-or-complete
+#bindkey '^[[Z]]' reverse-menu-complete
 bindkey -M menuselect '^[' undo
 
 #zstyle ':completion:*' menu select=1
 #zstyle ':completion:*:directory-stack' list-colors '=(#b) #([0-9]#)*( *)==95=38;5;12'
 
 # Options
-setopt COMPLETE_IN_WORD     # Complete from both ends of a word.
+#setopt COMPLETE_IN_WORD     # Complete from both ends of a word.
+##setopt ALWAYS_TO_END        # Move cursor to the end of a completed word.
+##setopt PATH_DIRS            # Perform path search even on command names with slashes.
+#setopt AUTO_MENU            # Show completion menu on a successive tab press.
+#setopt AUTO_LIST            # Automatically list choices on ambiguous completion.
+#setopt AUTO_PARAM_SLASH     # If completed parameter is a directory, add a trailing slash.
+#setopt EXTENDED_GLOB        # Needed for file modification glob modifiers with compinit.
+#unsetopt MENU_COMPLETE      # Do not autoselect the first completion entry.
+
+## Disable all custom completions
+unsetopt COMPLETE_IN_WORD
+#unsetopt AUTO_MENU
+#unsetopt AUTO_LIST
+#unsetopt AUTO_PARAM_SLASH
+#unsetopt EXTENDED_GLOB
+#unsetopt MENU_COMPLETE      # Do not autoselect the first completion entry.
+
 setopt ALWAYS_TO_END        # Move cursor to the end of a completed word.
 setopt PATH_DIRS            # Perform path search even on command names with slashes.
 setopt AUTO_MENU            # Show completion menu on a successive tab press.
@@ -41,6 +59,8 @@ setopt AUTO_PARAM_SLASH     # If completed parameter is a directory, add a trail
 setopt EXTENDED_GLOB        # Needed for file modification glob modifiers with compinit.
 unsetopt MENU_COMPLETE      # Do not autoselect the first completion entry.
 
+# Test the behavior with just the basics
+compinit
 # Variables
 LS_COLORS=${LS_COLORS:-'di=34:ln=35:so=32:pi=33:ex=31:bd=36;01:cd=33;01:su=31;40;07:sg=36;40;07:tw=32;40;07:ow=33;40;07:'}
 
