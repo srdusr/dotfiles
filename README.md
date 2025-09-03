@@ -18,8 +18,8 @@ Welcome, and make yourself at <b><i>$HOME</i></b>
 > Agnostic/cross-platform dotfiles (Linux/MacOS/Windows)
 
 
-- This repository is designed to be a bare Git dotfiles repository located in your home directory. 
-- Easy dotfiles management that respects the file hierarchy/XDG structure cross platform.
+- This repository is designed to be a bare Git dotfiles repository located in home directory/work-tree.
+- Easy dotfiles management that respects the file hierarchy/XDG structure of the platform.
 - Custom `config` command that intelligently manages files across different operating systems.
 
 Example:
@@ -77,7 +77,7 @@ git clone --bare https://github.com/srdusr/dotfiles.git $env:USERPROFILE/.cfg
 Copy and paste the following snippet to any profile/startup file ie. `~/.bashrc`, `~/.zshrc` etc.
 
 <details>
-  <summary><b>Bash/Zsh:</b> </summary>
+  <summary><b>Bash/Zsh:</b> (click here)</summary>
 
 ```bash
 # Dotfiles Management System
@@ -85,7 +85,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
 
     # Core git wrapper with repository as work-tree
     _config() {
-        git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
+        git --git-dir="$HOME/.cfg" --work-tree="$HOME" "$@"
     }
 
     # Detect OS
@@ -99,45 +99,102 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     # Map system path to repository path
     _repo_path() {
         local f="$1"
+        local relative_path="${f#$HOME/}"
+        local repo_path
 
-        # Check for paths that should go to the repository root
+        # If it's an absolute path that's not in HOME, handle it specially
+        if [[ "$f" == /* && "$f" != "$HOME/"* ]]; then
+            echo "$CFG_OS/root/$f"
+            return
+        fi
+
+        # Check for paths that are explicitly within the repo structure
         case "$f" in
-            common/*|linux/*|macos/*|windows/*|profile/*|README.md)
-                # If path already looks like a repo path, use it as is
+            "$HOME/.cfg/"*)
+                # We do not want to track files within the bare repo itself
+                echo ""
+                return
+                ;;
+            "common/"*)
+                # Common files remain in the common directory
                 echo "$f"
                 return
                 ;;
-            # Otherwise, convert to a relative path
-            "$HOME/"*)
-                f="${f#$HOME/}"
+            "$CFG_OS/"*)
+                # OS-specific files remain in their respective OS directories
+                echo "$f"
+                return
+                ;;
+            *)
+                # Default: place under OS-specific home
+                echo "$CFG_OS/home/$relative_path"
+                return
                 ;;
         esac
-
-        # Default: put under OS-specific home
-        echo "$CFG_OS/home/$f"
     }
 
     # Map repository path back to system path
     _sys_path() {
         local repo_path="$1"
+        local file_path
+
         case "$repo_path" in
-            # Files in the root of the repo
-            common/*|linux/*|macos/*|windows/*|profile/*)
-                # For directories, map to the repository directory
-                echo "$HOME/.cfg/$repo_path"
+            common/config/*)
+                # Maps common config files to the appropriate configuration directory
+                file_path="${repo_path#common/config/}"
+                if [[ "$CFG_OS" == "windows" ]]; then
+                    echo "$HOME/AppData/Local/$file_path"
+                else
+                    echo "$HOME/.config/$file_path"
+                fi
                 ;;
-            README.md)
-                # Specific file in the root
-                echo "$HOME/.cfg/README.md"
+            common/bin/*)
+                # Maps common bin files to the appropriate user local bin directory
+                file_path="${repo_path#common/bin/}"
+                if [[ "$CFG_OS" == "windows" ]]; then
+                    echo "$HOME/bin/$file_path"
+                else
+                    echo "$HOME/.local/bin/$file_path"
+                fi
                 ;;
-            # Otherwise, map to the home directory
+            common/*)
+                # Maps remaining common files to the home directory
+                file_path="${repo_path#common/}"
+                echo "$HOME/$file_path"
+                ;;
             */home/*)
-                echo "$HOME/${repo_path#*/home/}"
+                # Maps OS-specific home files to $HOME
+                file_path="${repo_path#*/home/}"
+                echo "$HOME/$file_path"
+                ;;
+            */root/*)
+                # Maps root files to the absolute root directory
+                file_path="${repo_path#*/root/}"
+                echo "/$file_path"
                 ;;
             *)
-                echo "/$repo_path"
+                # Fallback for other paths
+                echo "$HOME/$repo_path"
                 ;;
         esac
+    }
+
+    # Prompts for sudo if needed and runs the command
+    _sudo_prompt() {
+        if [[ $EUID -eq 0 ]]; then
+            "$@"
+        else
+            if command -v sudo >/dev/null; then
+                sudo "$@"
+            elif command -v doas >/dev/null; then
+                doas "$@"
+            elif command -v pkexec >/dev/null; then
+                pkexec "$@"
+            else
+                echo "Error: No privilege escalation tool (sudo, doas, pkexec) found."
+                return 1
+            fi
+        fi
     }
 
     # NOTE: can change `config` to whatever you feel comfortable ie. dotfiles, dots, cfg etc.
@@ -148,6 +205,10 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 local file_path
                 for file_path in "$@"; do
                     local repo_path="$(_repo_path "$file_path")"
+                    if [[ -z "$repo_path" ]]; then
+                         echo "Warning: Ignoring file within the bare repo: $file_path"
+                         continue
+                    fi
                     local full_repo_path="$HOME/.cfg/$repo_path"
                     mkdir -p "$(dirname "$full_repo_path")"
                     cp -a "$file_path" "$full_repo_path"
@@ -155,7 +216,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     echo "Added: $file_path -> $repo_path"
                 done
                 ;;
-
             rm)
                 local file_path
                 for file_path in "$@"; do
@@ -165,7 +225,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     echo "Removed: $file_path ($repo_path)"
                 done
                 ;;
-
             sync)
                 local direction="${1:-to-repo}"; shift
                 _config ls-files | while read -r repo_file; do
@@ -173,28 +232,31 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ "$direction" == "to-repo" ]]; then
                         if [[ -e "$sys_file" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
-                            cp "$sys_file" "$full_repo_path"
+                            cp -a "$sys_file" "$full_repo_path"
                             echo "Synced to repo: $sys_file"
                         fi
                     elif [[ "$direction" == "from-repo" ]]; then
                         if [[ -e "$full_repo_path" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
-                            mkdir -p "$(dirname "$sys_file")"
-                            cp "$full_repo_path" "$sys_file"
+                            local dest_dir="$(dirname "$sys_file")"
+                            if [[ "$sys_file" == "/etc"* || "$sys_file" == "/usr"* ]]; then
+                                _sudo_prompt cp -a "$full_repo_path" "$sys_file"
+                            else
+                                mkdir -p "$dest_dir"
+                                cp -a "$full_repo_path" "$sys_file"
+                            fi
                             echo "Synced from repo: $sys_file"
                         fi
                     fi
                 done
                 ;;
-
             status)
-                # Auto-sync any modified files
                 local auto_synced=()
                 while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ -e "$sys_file" && -e "$full_repo_path" ]]; then
                         if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
-                            \cp -f "$sys_file" "$full_repo_path"
+                            \cp -fa "$sys_file" "$full_repo_path"
                             auto_synced+=("$repo_file")
                         fi
                     fi
@@ -209,19 +271,40 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 _config status
                 echo
                 ;;
-
             deploy)
                 _config ls-files | while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ -e "$full_repo_path" ]]; then
-                        mkdir -p "$(dirname "$sys_file")"
-                        cp -a "$full_repo_path" "$sys_file"
-                        echo "Deployed: $repo_file -> $sys_file"
+                        if [[ -n "$sys_file" ]]; then
+                            local dest_dir="$(dirname "$sys_file")"
+                            if [[ "$sys_file" == "/etc"* || "$sys_file" == "/usr"* ]]; then
+                                _sudo_prompt mkdir -p "$dest_dir"
+                                _sudo_prompt cp -a "$full_repo_path" "$sys_file"
+                            else
+                                mkdir -p "$dest_dir"
+                                cp -a "$full_repo_path" "$sys_file"
+                            fi
+                            echo "Deployed: $repo_file -> $sys_file"
+                        fi
                     fi
                 done
                 ;;
-
+            backup)
+                local timestamp=$(date +%Y%m%d%H%M%S)
+                local backup_dir="$HOME/.dotfiles_backup/$timestamp"
+                echo "Backing up existing dotfiles to $backup_dir..."
+                
+                _config ls-files | while read -r repo_file; do
+                    local sys_file="$(_sys_path "$repo_file")"
+                    if [[ -e "$sys_file" ]]; then
+                        local dest_dir_full="$backup_dir/$(dirname "$repo_file")"
+                        mkdir -p "$dest_dir_full"
+                        cp -a "$sys_file" "$backup_dir/$repo_file"
+                    fi
+                done
+                echo "Backup complete. To restore, copy files from $backup_dir to their original locations."
+                ;;
             *)
                 _config "$cmd" "$@"
                 ;;
@@ -232,18 +315,17 @@ fi
 
   </details>
 
----
 
 ##### Windows
 Paste the PowerShell code block directly into your PowerShell profile. 
 To find your profile path, simply run `$PROFILE` in your terminal. You can open and edit it with `notepad $PROFILE`.
-If the file doesn't exist, you can create it
+If the file doesn't exist, you can create it.
 ```ps1
 New-Item -Path $PROFILE -ItemType File -Force
 ```
 
 <details>
-  <summary><b>PowerShell:</b> </summary>
+  <summary><b>PowerShell:</b> (click here)</summary>
 
 ```ps1
 # Dotfiles Management System
@@ -255,7 +337,7 @@ if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
             [Parameter(Mandatory=$true, ValueFromRemainingArguments=$true)]
             [String[]]$Args
         )
-        git --git-dir="$HOME\.cfg" --work-tree="$HOME\.cfg" @Args
+        git --git-dir="$HOME\.cfg" --work-tree="$HOME" @Args
     }
 
     # Detect OS (cross-platform, PowerShell-native)
@@ -274,39 +356,89 @@ if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
     function _repo_path {
         param([string]$FilePath)
 
-        switch -Regex ($FilePath) {
-            '^common/|^linux/|^macos/|^windows/|^profile/|README\.md' {
-                return $FilePath
-            }
-            "^$HOME\\" {
-                return $FilePath.Substring($HOME.Length + 1) # Remove $HOME\
-            }
-            default {
-                return "$CFG_OS/home/$($FilePath -replace '\\','/')"
-            }
+        $repoPath = ""
+        # Handle absolute paths outside the user's home directory
+        if ($FilePath.StartsWith("\") -or $FilePath.Contains(":")) {
+            $repoPath = "$CFG_OS\root\$FilePath"
+            return $repoPath -replace '\\', '/'
         }
+
+        $homePath = "$HOME"
+        # Check if file is in the home directory
+        if ($FilePath.StartsWith($homePath)) {
+            $relativePath = $FilePath.Substring($homePath.Length + 1)
+            # Check for paths that are explicitly within the repo structure
+            switch -wildcard ($FilePath) {
+                "$HOME\.cfg\*" { $repoPath = "" }
+                "common\*"    { $repoPath = $FilePath }
+                "$CFG_OS\*"   { $repoPath = $FilePath }
+                default       { $repoPath = "$CFG_OS\home\$relativePath" }
+            }
+        } else {
+            # Default for relative paths (assumes they are in the home directory)
+            $repoPath = "$CFG_OS\home\$FilePath"
+        }
+        
+        # Clean up path separators
+        return $repoPath -replace '\\', '/'
     }
 
     # Map repository path back to system path
     function _sys_path {
         param([string]$RepoPath)
 
-        switch -Regex ($RepoPath) {
-            '^common/|^linux/|^macos/|^windows/|^profile/' {
-                return Join-Path "$HOME\.cfg" $RepoPath
+        $sysPath = ""
+        switch -wildcard ($RepoPath) {
+            "common/config/*" {
+                $file = $RepoPath.Substring("common/config/".Length)
+                if ($CFG_OS -eq "windows") {
+                    $sysPath = Join-Path $HOME "AppData\Local\$file"
+                } else {
+                    $sysPath = Join-Path $HOME ".config\$file"
+                }
             }
-            'README\.md' {
-                return "$HOME\.cfg\README.md"
+            "common/bin/*" {
+                $file = $RepoPath.Substring("common/bin/".Length)
+                if ($CFG_OS -eq "windows") {
+                    $sysPath = Join-Path $HOME "bin\$file"
+                } else {
+                    $sysPath = Join-Path $HOME ".local\bin\$file"
+                }
             }
-            '.*/home/.*' {
-                return Join-Path $HOME ($RepoPath -replace '^.*/home/', '')
+            "common/*" {
+                $file = $RepoPath.Substring("common/".Length)
+                $sysPath = Join-Path $HOME $file
+            }
+            "*/home/*" {
+                $file = $RepoPath.Substring($RepoPath.IndexOf("home/") + "home/".Length)
+                $sysPath = Join-Path $HOME $file
+            }
+            "*/root/*" {
+                $file = $RepoPath.Substring($RepoPath.IndexOf("root/") + "root/".Length)
+                $sysPath = $file
             }
             default {
-                return "\" + $RepoPath
+                $sysPath = Join-Path $HOME $RepoPath
             }
+        }
+        return $sysPath -replace '/', '\'
+    }
+
+    # Prompts for administrator permissions if needed and runs the command
+    function _admin_prompt {
+        param(
+            [Parameter(Mandatory=$true, ValueFromRemainingArguments=$true)]
+            [String[]]$Command
+        )
+        if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            Write-Host "Warning: This action requires administrator privileges."
+            Start-Process powershell.exe -ArgumentList "-NoProfile", "-Command", "Set-Location '$PWD'; & $Command" -Verb RunAs
+        } else {
+            & $Command
         }
     }
 
+    # NOTE: can change `config` to whatever you feel comfortable ie. dotfiles, dots, cfg etc.
     function config {
         param(
             [string]$Command,
@@ -318,6 +450,10 @@ if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
             "add" {
                 foreach ($file in $Args) {
                     $repoPath = _repo_path $file
+                    if ([string]::IsNullOrEmpty($repoPath)) {
+                        Write-Host "Warning: Ignoring file within the bare repo: $file"
+                        continue
+                    }
                     $fullRepoPath = Join-Path "$HOME\.cfg" $repoPath
                     $dir = Split-Path $fullRepoPath
                     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
@@ -349,15 +485,19 @@ if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
                         }
                     } elseif ($direction -eq "from-repo") {
                         if ((Test-Path $fullRepoPath) -and ((Get-Content $fullRepoPath) -ne (Get-Content $sysFile))) {
-                            $dir = Split-Path $sysFile
-                            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
-                            Copy-Item $fullRepoPath $sysFile -Force
+                            $destDir = Split-Path $sysFile
+                            if ($sysFile.StartsWith('\') -or $sysFile.Contains(':')) {
+                                _admin_prompt Copy-Item $fullRepoPath $sysFile -Recurse -Force
+                            } else {
+                                if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
+                                Copy-Item $fullRepoPath $sysFile -Recurse -Force
+                            }
                             Write-Host "Synced from repo: $sysFile"
                         }
                     }
                 }
             }
-
+            
             "status" {
                 $autoSynced = @()
                 _config ls-files | ForEach-Object {
@@ -387,12 +527,35 @@ if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
                     $sysFile = _sys_path $repoFile
                     $fullRepoPath = Join-Path "$HOME\.cfg" $repoFile
                     if (Test-Path $fullRepoPath) {
-                        $dir = Split-Path $sysFile
-                        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
-                        Copy-Item $fullRepoPath $sysFile -Recurse -Force
-                        Write-Host "Deployed: $repoFile -> $sysFile"
+                        if (-not [string]::IsNullOrEmpty($sysFile)) {
+                            $destDir = Split-Path $sysFile
+                            if ($sysFile.StartsWith('\') -or $sysFile.Contains(':')) {
+                                _admin_prompt Copy-Item $fullRepoPath $sysFile -Recurse -Force
+                            } else {
+                                if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
+                                Copy-Item $fullRepoPath $sysFile -Recurse -Force
+                            }
+                            Write-Host "Deployed: $repoFile -> $sysFile"
+                        }
                     }
                 }
+            }
+            
+            "backup" {
+                $timestamp = Get-Date -Format "yyyyMMddHHmmss"
+                $backupDir = Join-Path $HOME ".dotfiles_backup\$timestamp"
+                Write-Host "Backing up existing dotfiles to $backupDir..."
+                
+                _config ls-files | ForEach-Object {
+                    $repoFile = $_
+                    $sysFile = _sys_path $repoFile
+                    if (Test-Path $sysFile) {
+                        $destDirFull = Join-Path $backupDir $repoFile
+                        if (-not (Test-Path $destDirFull)) { New-Item -ItemType Directory -Path $destDirFull -Force | Out-Null }
+                        Copy-Item $sysFile $destDirFull -Recurse -Force
+                    }
+                }
+                Write-Host "Backup complete. To restore, copy files from $backupDir to their original locations."
             }
 
             default {
@@ -405,7 +568,8 @@ if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
 
   </details>
 
----
+Restart the terminal or source the session profile file used.
+
 
 4. Make sure to not show untracked files
 

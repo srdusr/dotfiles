@@ -3,7 +3,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
 
     # Core git wrapper with repository as work-tree
     _config() {
-        git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
+        git --git-dir="$HOME/.cfg" --work-tree="$HOME" "$@"
     }
 
     # Detect OS
@@ -17,45 +17,102 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     # Map system path to repository path
     _repo_path() {
         local f="$1"
+        local relative_path="${f#$HOME/}"
+        local repo_path
 
-        # Check for paths that should go to the repository root
+        # If it's an absolute path that's not in HOME, handle it specially
+        if [[ "$f" == /* && "$f" != "$HOME/"* ]]; then
+            echo "$CFG_OS/root/$f"
+            return
+        fi
+
+        # Check for paths that are explicitly within the repo structure
         case "$f" in
-            common/*|linux/*|macos/*|windows/*|profile/*|README.md)
-                # If path already looks like a repo path, use it as is
+            "$HOME/.cfg/"*)
+                # We do not want to track files within the bare repo itself
+                echo ""
+                return
+                ;;
+            "common/"*)
+                # Common files remain in the common directory
                 echo "$f"
                 return
                 ;;
-            # Otherwise, convert to a relative path
-            "$HOME/"*)
-                f="${f#$HOME/}"
+            "$CFG_OS/"*)
+                # OS-specific files remain in their respective OS directories
+                echo "$f"
+                return
+                ;;
+            *)
+                # Default: place under OS-specific home
+                echo "$CFG_OS/home/$relative_path"
+                return
                 ;;
         esac
-
-        # Default: put under OS-specific home
-        echo "$CFG_OS/home/$f"
     }
 
     # Map repository path back to system path
     _sys_path() {
         local repo_path="$1"
+        local file_path
+
         case "$repo_path" in
-            # Files in the root of the repo
-            common/*|linux/*|macos/*|windows/*|profile/*)
-                # For directories, map to the repository directory
-                echo "$HOME/.cfg/$repo_path"
+            common/config/*)
+                # Maps common config files to the appropriate configuration directory
+                file_path="${repo_path#common/config/}"
+                if [[ "$CFG_OS" == "windows" ]]; then
+                    echo "$HOME/AppData/Local/$file_path"
+                else
+                    echo "$HOME/.config/$file_path"
+                fi
                 ;;
-            README.md)
-                # Specific file in the root
-                echo "$HOME/.cfg/README.md"
+            common/bin/*)
+                # Maps common bin files to the appropriate user local bin directory
+                file_path="${repo_path#common/bin/}"
+                if [[ "$CFG_OS" == "windows" ]]; then
+                    echo "$HOME/bin/$file_path"
+                else
+                    echo "$HOME/.local/bin/$file_path"
+                fi
                 ;;
-            # Otherwise, map to the home directory
+            common/*)
+                # Maps remaining common files to the home directory
+                file_path="${repo_path#common/}"
+                echo "$HOME/$file_path"
+                ;;
             */home/*)
-                echo "$HOME/${repo_path#*/home/}"
+                # Maps OS-specific home files to $HOME
+                file_path="${repo_path#*/home/}"
+                echo "$HOME/$file_path"
+                ;;
+            */root/*)
+                # Maps root files to the absolute root directory
+                file_path="${repo_path#*/root/}"
+                echo "/$file_path"
                 ;;
             *)
-                echo "/$repo_path"
+                # Fallback for other paths
+                echo "$HOME/$repo_path"
                 ;;
         esac
+    }
+
+    # Prompts for sudo if needed and runs the command
+    _sudo_prompt() {
+        if [[ $EUID -eq 0 ]]; then
+            "$@"
+        else
+            if command -v sudo >/dev/null; then
+                sudo "$@"
+            elif command -v doas >/dev/null; then
+                doas "$@"
+            elif command -v pkexec >/dev/null; then
+                pkexec "$@"
+            else
+                echo "Error: No privilege escalation tool (sudo, doas, pkexec) found."
+                return 1
+            fi
+        fi
     }
 
     # NOTE: can change `config` to whatever you feel comfortable ie. dotfiles, dots, cfg etc.
@@ -66,6 +123,10 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 local file_path
                 for file_path in "$@"; do
                     local repo_path="$(_repo_path "$file_path")"
+                    if [[ -z "$repo_path" ]]; then
+                         echo "Warning: Ignoring file within the bare repo: $file_path"
+                         continue
+                    fi
                     local full_repo_path="$HOME/.cfg/$repo_path"
                     mkdir -p "$(dirname "$full_repo_path")"
                     cp -a "$file_path" "$full_repo_path"
@@ -73,7 +134,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     echo "Added: $file_path -> $repo_path"
                 done
                 ;;
-
             rm)
                 local file_path
                 for file_path in "$@"; do
@@ -83,7 +143,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     echo "Removed: $file_path ($repo_path)"
                 done
                 ;;
-
             sync)
                 local direction="${1:-to-repo}"; shift
                 _config ls-files | while read -r repo_file; do
@@ -91,28 +150,31 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ "$direction" == "to-repo" ]]; then
                         if [[ -e "$sys_file" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
-                            cp "$sys_file" "$full_repo_path"
+                            cp -a "$sys_file" "$full_repo_path"
                             echo "Synced to repo: $sys_file"
                         fi
                     elif [[ "$direction" == "from-repo" ]]; then
                         if [[ -e "$full_repo_path" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
-                            mkdir -p "$(dirname "$sys_file")"
-                            cp "$full_repo_path" "$sys_file"
+                            local dest_dir="$(dirname "$sys_file")"
+                            if [[ "$sys_file" == "/etc"* || "$sys_file" == "/usr"* ]]; then
+                                _sudo_prompt cp -a "$full_repo_path" "$sys_file"
+                            else
+                                mkdir -p "$dest_dir"
+                                cp -a "$full_repo_path" "$sys_file"
+                            fi
                             echo "Synced from repo: $sys_file"
                         fi
                     fi
                 done
                 ;;
-
             status)
-                # Auto-sync any modified files
                 local auto_synced=()
                 while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ -e "$sys_file" && -e "$full_repo_path" ]]; then
                         if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
-                            \cp -f "$sys_file" "$full_repo_path"
+                            \cp -fa "$sys_file" "$full_repo_path"
                             auto_synced+=("$repo_file")
                         fi
                     fi
@@ -127,25 +189,48 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 _config status
                 echo
                 ;;
-
             deploy)
                 _config ls-files | while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ -e "$full_repo_path" ]]; then
-                        mkdir -p "$(dirname "$sys_file")"
-                        cp -a "$full_repo_path" "$sys_file"
-                        echo "Deployed: $repo_file -> $sys_file"
+                        if [[ -n "$sys_file" ]]; then
+                            local dest_dir="$(dirname "$sys_file")"
+                            if [[ "$sys_file" == "/etc"* || "$sys_file" == "/usr"* ]]; then
+                                _sudo_prompt mkdir -p "$dest_dir"
+                                _sudo_prompt cp -a "$full_repo_path" "$sys_file"
+                            else
+                                mkdir -p "$dest_dir"
+                                cp -a "$full_repo_path" "$sys_file"
+                            fi
+                            echo "Deployed: $repo_file -> $sys_file"
+                        fi
                     fi
                 done
                 ;;
+            backup)
+                local timestamp=$(date +%Y%m%d%H%M%S)
+                local backup_dir="$HOME/.dotfiles_backup/$timestamp"
+                echo "Backing up existing dotfiles to $backup_dir..."
 
+                _config ls-files | while read -r repo_file; do
+                    local sys_file="$(_sys_path "$repo_file")"
+                    if [[ -e "$sys_file" ]]; then
+                        local dest_dir_full="$backup_dir/$(dirname "$repo_file")"
+                        mkdir -p "$dest_dir_full"
+                        cp -a "$sys_file" "$backup_dir/$repo_file"
+                    fi
+                done
+                echo "Backup complete. To restore, copy files from $backup_dir to their original locations."
+                ;;
             *)
                 _config "$cmd" "$@"
                 ;;
         esac
     }
 fi
+
+
 ## Dotfiles Management System
 #if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
 #
