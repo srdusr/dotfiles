@@ -1,927 +1,925 @@
 #!/usr/bin/env bash
 
-#======================================
-# Variables
-#======================================
-
-# Color definitions
-NOCOLOR='\033[0m'
-RED='\033[00;31m'
-GREEN='\033[00;32m'
-
-# Dotfiles
-dotfiles_url='https://github.com/srdusr/dotfiles.git'
-dotfiles_dir="$HOME/.cfg"
-
-# Log file
-LOG_FILE="dotfiles.log"
-TRASH_DIR="$HOME/.local/share/Trash"
-
-# Ensure Trash directory exists
-if [ ! -d "$TRASH_DIR" ]; then
-    mkdir -p "$TRASH_DIR"
-    if [ $? -ne 0 ]; then
-        echo "Failed to create Trash directory. Exiting..."
-        exit 1
-    fi
+# Execute the main function if script is run directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
 fi
 
-# Move log file to Trash directory
-mv -f "$LOG_FILE" "$TRASH_DIR/"
+# Enhanced Dotfiles Installation Script
+#======================================
 
-# Redirect stderr to both stderr and log file
-exec 2> >(tee -a "$LOG_FILE")
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
-# Function to log errors
-log_error() {
-    local message="$1"
-    echo "[ERROR] $(date +'%Y-%m-%d %H:%M:%S') - $message" | tee -a "$LOG_FILE" >&2
+#======================================
+# Variables & Configuration
+#======================================
+
+# Color definitions for pretty UI
+NOCOLOR='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+BOLD='\033[1m'
+
+# Dotfiles configuration
+DOTFILES_URL='https://github.com/srdusr/dotfiles.git'
+DOTFILES_DIR="$HOME/.cfg"
+LOG_FILE="$HOME/.local/share/dotfiles_install.log"
+TRASH_DIR="$HOME/.local/share/Trash"
+
+# Installation tracking
+INSTALL_SUMMARY=()
+FAILED_ITEMS=()
+SKIPPED_ITEMS=()
+
+#======================================
+# UI Functions
+#======================================
+
+# Print colorized output
+print_color() {
+    local color="$1"
+    local message="$2"
+    echo -e "${color}${message}${NOCOLOR}"
 }
 
-# Function to handle errors
-handle_error() {
-    local message="$1"
-    log_error "$message"
-    exit 1
+# Print header with decorative border
+print_header() {
+    local title="$1"
+    local border_char="="
+    local border_length=60
+
+    echo
+    print_color "$CYAN" "$(printf '%*s' $border_length '' | tr ' ' "$border_char")"
+    print_color "$CYAN$BOLD" "$(printf '%*s' $(((border_length + ${#title}) / 2)) "$title")"
+    print_color "$CYAN" "$(printf '%*s' $border_length '' | tr ' ' "$border_char")"
+    echo
 }
 
-# Function to log completion messages
-log_complete() {
-    local message="$1"
-    echo "[COMPLETE] $(date +'%Y-%m-%d %H:%M:%S') - $message" | tee -a "$LOG_FILE"
+# Print section header
+print_section() {
+    local title="$1"
+    echo
+    print_color "$BLUE$BOLD" "▶ $title"
+    print_color "$BLUE" "$(printf '%*s' $((${#title} + 2)) '' | tr ' ' '-')"
 }
 
-# Function to handle completion
-handle_complete() {
+# Print success message
+print_success() {
     local message="$1"
-    log_complete "$message"
+    print_color "$GREEN" "✓ $message"
+    INSTALL_SUMMARY+=("✓ $message")
 }
 
-# Function to prompt the user
+# Print error message
+print_error() {
+    local message="$1"
+    print_color "$RED" "✗ $message" >&2
+    FAILED_ITEMS+=("✗ $message")
+}
+
+# Print warning message
+print_warning() {
+    local message="$1"
+    print_color "$YELLOW" "⚠ $message"
+}
+
+# Print info message
+print_info() {
+    local message="$1"
+    print_color "$CYAN" "ℹ $message"
+}
+
+# Print skip message
+print_skip() {
+    local message="$1"
+    print_color "$YELLOW" "⏭ $message"
+    SKIPPED_ITEMS+=("⏭ $message")
+}
+
+#======================================
+# Logging Functions
+#======================================
+
+# Setup logging
+setup_logging() {
+    local log_dir
+    log_dir="$(dirname "$LOG_FILE")"
+
+    # Create log directory if it doesn't exist
+    if [[ ! -d "$log_dir" ]]; then
+        mkdir -p "$log_dir" || {
+            print_error "Failed to create log directory: $log_dir"
+            exit 1
+        }
+    fi
+
+    # Create trash directory if it doesn't exist
+    if [[ ! -d "$TRASH_DIR" ]]; then
+        mkdir -p "$TRASH_DIR" || {
+            print_error "Failed to create trash directory: $TRASH_DIR"
+            exit 1
+        }
+    fi
+
+    # Move old log file to trash if it exists
+    [[ -f "$LOG_FILE" ]] && mv "$LOG_FILE" "$TRASH_DIR/"
+
+    # Initialize log file
+    {
+        echo "======================================="
+        echo "Dotfiles Installation Log"
+        echo "Date: $(date)"
+        echo "User: $USER"
+        echo "Host: $HOSTNAME"
+        echo "OS: $(uname -s)"
+        echo "======================================="
+        echo
+    } > "$LOG_FILE"
+
+    # Redirect stderr to log file while keeping it visible
+    exec 2> >(tee -a "$LOG_FILE" >&2)
+}
+
+# Log function
+log_message() {
+    local level="$1"
+    local message="$2"
+    echo "[$level] $(date +'%Y-%m-%d %H:%M:%S') - $message" | tee -a "$LOG_FILE"
+}
+
+#======================================
+# User Interaction Functions
+#======================================
+
+# Prompt function
 prompt_user() {
-    local prompt="$1 [Y/n] "
-    local default_response="${2:-Y}"
+    local question="$1"
+    local default="${2:-Y}"
     local response
 
-    read -p "$prompt" -n 1 -r -e -i "$default_response" response
-    case "${response^^}" in
-    Y) return 0 ;;
-    N) return 1 ;;
-    *) handle_error "Invalid choice. Exiting.." && exit ;;
-    esac
-}
-
-# Function to temporarily unset GIT_WORK_TREE
-function git_without_work_tree() {
-    # Check if the current directory is a Git repository
-    if [ -d "$PWD/.git" ]; then
-        # Check if the current directory is inside the work tree
-        if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; then
-            # If it's a Git repository and inside the work tree, proceed with unsetting GIT_WORK_TREE
-            GIT_WORK_TREE_OLD="$GIT_WORK_TREE"
-            unset GIT_WORK_TREE
-            "$@"
-            export GIT_WORK_TREE="$GIT_WORK_TREE_OLD"
+    while true; do
+        if [[ "$default" == "Y" ]]; then
+            print_color "$YELLOW" "$question [Y/n]: "
         else
-            # If it's a Git repository but not inside the work tree, call git command directly
-            git "$@"
+            print_color "$YELLOW" "$question [y/N]: "
         fi
-    else
-        # If it's not a Git repository, call git command directly
-        git "$@"
-    fi
-}
 
-# Set alias conditionally
-alias git='git_without_work_tree'
+        read -r response
 
-# Check for privilege escalation tools
-#--------------------------------------
-check_privilege_tools() {
-    if [ -x "$(command -v sudo)" ]; then
-        PRIVILEGE_TOOL="sudo"
-    elif [ -x "$(command -v doas)" ]; then
-        PRIVILEGE_TOOL="doas"
-    elif [ -x "$(command -v pkexec)" ]; then
-        PRIVILEGE_TOOL="pkexec"
-    elif [ -x "$(command -v dzdo)" ]; then
-        PRIVILEGE_TOOL="dzdo"
-    elif [ "$(id -u)" -eq 0 ]; then
-        PRIVILEGE_TOOL="" # root
-    else
-        PRIVILEGE_TOOL="" # No privilege escalation mechanism found
-        printf "\n${RED}Error: No privilege escalation tool (sudo, doas, pkexec, dzdo, or root privileges) found. You may not have sufficient permissions to run this script.${NOCOLOR}\n"
-        printf "\nAttempt to continue Installation (might fail without a privilege escalation tool)? [yes/no] "
-        read continue_choice
-        case $continue_choice in
-        [Yy] | [Yy][Ee][Ss]) ;;
-        [Nn] | [Nn][Oo]) exit ;;
-        *) handle_error "Invalid choice. Exiting..." && exit ;;
+        # Use default if no response
+        if [[ -z "$response" ]]; then
+            response="$default"
+        fi
+
+        case "${response^^}" in
+            Y|YES) return 0 ;;
+            N|NO) return 1 ;;
+            *) print_warning "Please answer Y/yes or N/no" ;;
         esac
-    fi
+    done
 }
 
-# Function to set locale to en_US.UTF-8
-set_locale() {
-    echo "Setting locale to en_US.UTF-8..."
-    if ! "$PRIVILEGE_TOOL" localectl set-locale LANG=en_US.UTF-8; then
-        handle_error "Failed to set locale to en_US.UTF-8"
-    fi
-}
+# Multi-choice prompt
+prompt_choice() {
+    local question="$1"
+    shift
+    local choices=("$@")
+    local choice
 
-# Change shell to zsh
-change_shell() {
-    if prompt_user "Change shell to zsh?"; then
-        if command -v zsh &>/dev/null; then
-            chsh -s "$(which zsh)" && echo "Shell changed to zsh. Please log out and log back in to apply the changes."
-            #sudo chsh -s "$(which zsh)" "$(whoami)"
+    echo
+    print_color "$YELLOW$BOLD" "$question"
+    for i in "${!choices[@]}"; do
+        print_color "$CYAN" "$((i + 1)). ${choices[i]}"
+    done
+
+    while true; do
+        print_color "$YELLOW" "Please enter your choice (1-${#choices[@]}): "
+        read -r choice
+
+        if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#choices[@]})); then
+            return $((choice - 1))
         else
-            echo "Error: zsh is not installed."
+            print_warning "Invalid choice. Please enter a number between 1 and ${#choices[@]}"
         fi
-    else
-        echo "Shell not changed."
-    fi
+    done
 }
-
-# Initialize git submodules
-submodules() {
-    echo "Initializing submodule(s)"
-    git submodule update --init --recursive
-}
-
-# Install Zsh plugins
-install_zsh_plugins() {
-    local zsh_plugins_dir="$HOME/.config/zsh/plugins"
-
-    mkdir -p "$HOME/.config/zsh"
-    mkdir -p "$zsh_plugins_dir"
-
-    if [ ! -d "$zsh_plugins_dir/zsh-you-should-use" ]; then
-        echo "Installing zsh-you-should-use..."
-        git clone https://github.com/MichaelAquilina/zsh-you-should-use.git "$zsh_plugins_dir/zsh-you-should-use"
-    else
-        echo "zsh-you-should-use is already installed."
-    fi
-
-    if [ ! -d "$zsh_plugins_dir/zsh-syntax-highlighting" ]; then
-        echo "Installing zsh-syntax-highlighting..."
-        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$zsh_plugins_dir/zsh-syntax-highlighting"
-    else
-        echo "zsh-syntax-highlighting is already installed."
-    fi
-
-    if [ ! -d "$zsh_plugins_dir/zsh-autosuggestions" ]; then
-        echo "Installing zsh-autosuggestions..."
-        git clone https://github.com/zsh-users/zsh-autosuggestions.git "$zsh_plugins_dir/zsh-autosuggestions"
-    else
-        echo "zsh-autosuggestions is already installed."
-    fi
-}
-
-#==============================================================================
 
 #======================================
-# Common Sources/Dependencies
+# System Detection Functions
 #======================================
-echo "$dotfiles_dir" >>.gitignore
-echo "install.sh" >>.gitignore
 
-# Dotfiles
-function config {
-    git --git-dir="$dotfiles_dir"/ --work-tree="$HOME" "$@"
+# Detect operating system
+detect_os() {
+    case "$(uname -s)" in
+        Linux)   CFG_OS="linux" ;;
+        Darwin)  CFG_OS="macos" ;;
+        MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
+        *)       CFG_OS="unknown" ;;
+    esac
+
+    print_info "Detected OS: $CFG_OS"
+    log_message "INFO" "Detected operating system: $CFG_OS"
 }
 
-# Function to install dotfiles
-install_dotfiles() {
-    # Check if the $dotfiles_dir directory exists
-    if [ -d "$dotfiles_dir" ]; then
-        config pull >/dev/null 2>&1
-        update=true
+# Detect privilege escalation tools
+detect_privilege_tools() {
+    if command -v sudo &>/dev/null; then
+        PRIVILEGE_TOOL="sudo"
+    elif command -v doas &>/dev/null; then
+        PRIVILEGE_TOOL="doas"
+    elif command -v pkexec &>/dev/null; then
+        PRIVILEGE_TOOL="pkexec"
+    elif [[ "$(id -u)" -eq 0 ]]; then
+        PRIVILEGE_TOOL=""  # Running as root
     else
-        git clone --bare "$dotfiles_url" "$dotfiles_dir" >/dev/null 2>&1
-        update=false
-    fi
-    std_err_output=$(config checkout 2>&1 >/dev/null) || true
-
-    if [[ $std_err_output == *"following untracked working tree files would be overwritten"* ]]; then
-        if [ "$update" = false ]; then
-            config checkout -- /dev/null 2>&1
-        fi
-    fi
-    config config status.showUntrackedFiles no
-
-    git config --global include.path "$HOME.gitconfig.aliases"
-
-    # Prompt the user if they want to overwrite existing files
-    if prompt_user "Do you want to overwrite existing files and continue with the dotfiles setup?"; then
-        config fetch origin main:main
-
-        config reset --hard main
-
-        config checkout -f
-        if [ $? -eq 0 ]; then
-            echo "Successfully backed up conflicting dotfiles in $dotfiles_dir-backup/ and imported $dotfiles_dir."
+        PRIVILEGE_TOOL=""
+        print_warning "No privilege escalation tool found"
+        if prompt_user "Continue without privilege escalation? (Installation may fail for some components)" "N"; then
+            print_info "Continuing without privilege escalation..."
         else
-            handle_error "Mission failed."
+            print_error "Privilege escalation required. Exiting."
+            exit 1
         fi
-    else
-        # User chose not to overwrite existing files
-        handle_error "Aborted by user. Exiting..."
     fi
+
+    [[ -n "$PRIVILEGE_TOOL" ]] && print_success "Using privilege escalation tool: $PRIVILEGE_TOOL"
 }
 
-# Check if necessary dependencies are installed
-#--------------------------------------
-# Download dependencies (wget/curl)
-check_download_dependencies() {
-    if [ -x "$(command -v wget)" ]; then
-        DOWNLOAD_COMMAND="wget"
-    elif [ -x "$(command -v curl)" ]; then
-        DOWNLOAD_COMMAND="curl"
-    else
-        handle_error "Neither wget nor curl found. Please install one of them to continue!"
+# Detect Linux distribution
+detect_linux_distro() {
+    if [[ ! -f /etc/os-release ]]; then
+        print_error "/etc/os-release not found"
+        return 1
     fi
+
+    source /etc/os-release
+
+    case "$ID" in
+        arch|manjaro|endeavouros)     DISTRO="PACMAN" ;;
+        debian|ubuntu|mint|pop)       DISTRO="APT" ;;
+        fedora|rhel|centos|rocky)     DISTRO="DNF" ;;
+        opensuse*|sles)               DISTRO="ZYPPER" ;;
+        gentoo)                       DISTRO="PORTAGE" ;;
+        *)
+            print_warning "Unknown distribution: $ID"
+            # Try to detect package managers
+            for pm in pacman apt dnf zypper emerge; do
+                if command -v "$pm" &>/dev/null; then
+                    case "$pm" in
+                        pacman) DISTRO="PACMAN" ;;
+                        apt) DISTRO="APT" ;;
+                        dnf) DISTRO="DNF" ;;
+                        zypper) DISTRO="ZYPPER" ;;
+                        emerge) DISTRO="PORTAGE" ;;
+                    esac
+                    break
+                fi
+            done
+
+            if [[ -z "${DISTRO:-}" ]]; then
+                print_error "Could not detect package manager"
+                return 1
+            fi
+            ;;
+    esac
+
+    print_success "Detected Linux distribution: $ID (Package manager: $DISTRO)"
+    log_message "INFO" "Detected Linux distribution: $ID, Package manager: $DISTRO"
 }
 
-# Download a file using wget or curl
+#======================================
+# Utility Functions
+#======================================
+
+# Check if command exists
+command_exists() {
+    command -v "$1" &>/dev/null
+}
+
+# Download file with progress
 download_file() {
     local url="$1"
     local output="$2"
 
-    if [ "$DOWNLOAD_COMMAND" = "wget" ]; then
-        if ! wget -q --show-progress -O "$output" "$url"; then
-            handle_error "Download failed. Exiting..."
-            exit 1
-        fi
-    elif [ "$DOWNLOAD_COMMAND" = "curl" ]; then
-        if ! curl --progress-bar -# -o "$output" "$url"; then
-            handle_error "Download failed. Exiting..."
-            exit 1
-        fi
+    if command_exists wget; then
+        wget --progress=bar:force -O "$output" "$url" 2>&1 | \
+            while IFS= read -r line; do
+                if [[ "$line" =~ [0-9]+% ]]; then
+                    printf "\r%s" "$line"
+                fi
+            done
+        echo
+    elif command_exists curl; then
+        curl --progress-bar -o "$output" "$url"
     else
-        echo "Unsupported download command: $DOWNLOAD_COMMAND"
-        exit 1
+        print_error "Neither wget nor curl found"
+        return 1
     fi
 }
 
-# Install yq
-install_yq() {
-    if ! command -v yq &>/dev/null; then
-        echo "yq not found, installing..."
-        local bin_dir="$HOME/.local/bin"
-        local yq_url="https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64"
-        local yq_path="$bin_dir/yq"
+# Create directory with proper permissions
+create_dir() {
+    local dir="$1"
+    local permissions="${2:-755}"
 
-        echo "Installing yq..."
-
-        # Create bin directory if it doesn't exist
-        mkdir -p "$bin_dir" || {
-            echo "Error: Failed to create directory $bin_dir"
+    if [[ ! -d "$dir" ]]; then
+        mkdir -p "$dir" || {
+            print_error "Failed to create directory: $dir"
             return 1
         }
-
-        # Download yq
-        download_file "$yq_url" "$yq_path" || return 1
-
-        # Make yq executable
-        chmod +x "$yq_path" || {
-            echo "Error: Failed to set executable permissions for $yq_path"
-            return 1
-        }
-
-        echo "yq installed successfully to $bin_dir."
-
-        # Add bin directory to PATH if not already added
-        if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
-            echo "Adding $bin_dir to PATH"
-            echo "export PATH=\"$bin_dir:\$PATH\"" >>"$HOME/.bashrc"
-            export PATH="$bin_dir:$PATH"
-        fi
+        chmod "$permissions" "$dir"
+        print_success "Created directory: $dir"
     else
-        echo "yq is already installed."
+        print_info "Directory already exists: $dir"
     fi
 }
 
-#------------------------------------------------------------------------------
-
-#==============================================================================
-
 #======================================
-# Check Operating System
+# Git Configuration Functions
 #======================================
-check_os() {
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "Linux OS detected."
-        # Implement Linux-specific checks
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "MacOS detected."
-        # Implement MacOS-specific checks
-    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-        echo "Windows-like environment detected."
-        # Implement Windows-specific checks
+
+# Git wrapper to avoid conflicts
+git_without_work_tree() {
+    if [[ -d "$PWD/.git" ]] && [[ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" == "true" ]]; then
+        local old_work_tree="$GIT_WORK_TREE"
+        unset GIT_WORK_TREE
+        git "$@"
+        export GIT_WORK_TREE="$old_work_tree"
     else
-        handle_error "Unsupported operating system."
+        git "$@"
     fi
 }
 
-#==============================================================================
+# Core config command
+_config() {
+    git --git-dir="$DOTFILES_DIR" --work-tree="$HOME" "$@"
+}
 
-#======================================
-# Linux
-#======================================
+# Path mapping functions
+_repo_path() {
+    local f="$1"
 
-# Check Distro
-#--------------------------------------
+    case "$f" in
+        linux/*|macos/*|windows/*|common/*|profile/*|.*) echo "$f"; return ;;
+    esac
 
-# Detect package type from /etc/issue
-_found_arch() {
-    local _ostype="$1"
+    [[ "$f" = "$HOME"* ]] && f="${f#$HOME/}"
+    echo "$CFG_OS/home/$f"
+}
+
+_sys_path() {
+    local repo_path="$1"
+    case "$repo_path" in
+        */home/*) echo "$HOME/${repo_path#*/home/}" ;;
+        *) echo "/$repo_path" ;;
+    esac
+}
+
+# Enhanced config wrapper with better path handling
+config() {
+    local cmd="$1"
     shift
-    grep -qis "$*" /etc/issue && _distro="$_ostype"
+
+    case "$cmd" in
+        add)
+            for file_path in "$@"; do
+                local repo_path
+                repo_path="$(_repo_path "$file_path")"
+                local full_repo_path="$DOTFILES_DIR/$repo_path"
+
+                create_dir "$(dirname "$full_repo_path")"
+                cp -a "$file_path" "$full_repo_path" || {
+                    print_error "Failed to copy $file_path"
+                    continue
+                }
+
+                _config add "$repo_path" || {
+                    print_error "Failed to git add $repo_path"
+                    continue
+                }
+
+                print_success "Added: $file_path → $repo_path"
+            done
+            ;;
+
+        status)
+            # Auto-sync modified files
+            local synced_files=()
+            while IFS= read -r repo_file; do
+                [[ -z "$repo_file" ]] && continue
+                local sys_file full_repo_path
+                sys_file="$(_sys_path "$repo_file")"
+                full_repo_path="$DOTFILES_DIR/$repo_file"
+
+                if [[ -e "$sys_file" && -e "$full_repo_path" ]]; then
+                    if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
+                        cp -f "$sys_file" "$full_repo_path"
+                        synced_files+=("$repo_file")
+                    fi
+                fi
+            done < <(_config ls-files 2>/dev/null)
+
+            if [[ ${#synced_files[@]} -gt 0 ]]; then
+                print_section "Auto-synced Files"
+                for repo_file in "${synced_files[@]}"; do
+                    print_success "Synced: $(_sys_path "$repo_file") → $repo_file"
+                done
+                echo
+            fi
+
+            _config status
+            ;;
+
+        deploy)
+            local deployed=()
+            while IFS= read -r repo_file; do
+                [[ -z "$repo_file" ]] && continue
+                local sys_file full_repo_path
+                sys_file="$(_sys_path "$repo_file")"
+                full_repo_path="$DOTFILES_DIR/$repo_file"
+
+                if [[ -e "$full_repo_path" ]]; then
+                    create_dir "$(dirname "$sys_file")"
+                    cp -a "$full_repo_path" "$sys_file" || {
+                        print_error "Failed to deploy $repo_file"
+                        continue
+                    }
+                    deployed+=("$repo_file")
+                fi
+            done < <(_config ls-files 2>/dev/null)
+
+            if [[ ${#deployed[@]} -gt 0 ]]; then
+                print_success "Deployed ${#deployed[@]} files"
+            else
+                print_warning "No files to deploy"
+            fi
+            ;;
+
+        *)
+            _config "$cmd" "$@"
+            ;;
+    esac
 }
 
-# Detect package type
-_distro_detect() {
-    # Check if /etc/os-release exists and extract information
-    if [ -f /etc/os-release ]; then
-        source /etc/os-release
-        case "$ID" in
-        "arch")
-            _distro="PACMAN"
-            return
+
+#======================================
+# Installation Functions
+#======================================
+
+# Install dotfiles
+install_dotfiles() {
+    print_section "Installing Dotfiles"
+
+    local update=false
+
+    if [[ -d "$DOTFILES_DIR" ]]; then
+        if prompt_user "Dotfiles repository already exists. Update it?"; then
+            print_info "Updating existing dotfiles..."
+            config pull origin main || {
+                print_error "Failed to pull updates"
+                return 1
+            }
+            update=true
+        else
+            print_skip "Skipping dotfiles update"
+            return 0
+        fi
+    else
+        print_info "Cloning dotfiles repository..."
+        git clone --bare "$DOTFILES_URL" "$DOTFILES_DIR" || {
+            print_error "Failed to clone dotfiles repository"
+            return 1
+        }
+    fi
+
+    # Check for conflicts
+    local conflicts
+    conflicts=$(config checkout 2>&1 | grep -E "^\s+" | awk '{print $1}' || true)
+
+    if [[ -n "$conflicts" ]]; then
+        print_warning "The following files will be overwritten:"
+        echo "$conflicts"
+
+        if prompt_user "Continue and overwrite these files?"; then
+            # Backup conflicting files
+            local backup_dir="$HOME/.dotfiles-backup-$(date +%Y%m%d-%H%M%S)"
+            create_dir "$backup_dir"
+
+            while IFS= read -r file; do
+                [[ -z "$file" ]] && continue
+                [[ -e "$HOME/$file" ]] && cp -r "$HOME/$file" "$backup_dir/"
+            done <<< "$conflicts"
+
+            print_info "Backed up conflicting files to: $backup_dir"
+        else
+            print_error "Installation cancelled by user"
+            return 1
+        fi
+    fi
+
+    # Checkout files
+    config checkout -f || {
+        print_error "Failed to checkout dotfiles"
+        return 1
+    }
+
+    # Configure repository
+    config config status.showUntrackedFiles no
+
+    print_success "Dotfiles installed successfully"
+}
+
+# Create user directories
+setup_user_dirs() {
+    print_section "Setting Up User Directories"
+
+    local directories=('.cache' '.config' '.local/bin' '.local/share' '.scripts')
+
+    for dir in "${directories[@]}"; do
+        create_dir "$HOME/$dir"
+    done
+
+    # Handle XDG user directories
+    if [[ -f "$HOME/.config/user-dirs.dirs" ]]; then
+        if prompt_user "Configure XDG user directories?"; then
+            source "$HOME/.config/user-dirs.dirs"
+
+            # Create XDG directories
+            for var in XDG_DESKTOP_DIR XDG_DOWNLOAD_DIR XDG_TEMPLATES_DIR XDG_PUBLICSHARE_DIR \
+                      XDG_DOCUMENTS_DIR XDG_MUSIC_DIR XDG_PICTURES_DIR XDG_VIDEOS_DIR; do
+                local dir_path="${!var:-}"
+                [[ -n "$dir_path" ]] && create_dir "$dir_path"
+            done
+
+            print_success "XDG user directories configured"
+        fi
+    fi
+}
+
+install_yq() {
+    local bin_dir="$HOME/.local/bin"
+    local yq_url="https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64"
+    local yq_path="$bin_dir/yq"
+
+    print_info "Installing yq..."
+
+    create_dir "$bin_dir"
+
+    download_file "$yq_url" "$yq_path" || return 1
+
+    chmod +x "$yq_path" || {
+        print_error "Failed to set executable permissions for yq"
+        return 1
+    }
+
+    # Add to PATH if not already there
+    if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
+        export PATH="$bin_dir:$PATH"
+        echo "export PATH=\"$bin_dir:\$PATH\"" >> "$HOME/.bashrc"
+    fi
+
+    print_success "yq installed successfully"
+}
+
+# Install packages based on OS and package manager
+install_packages() {
+    print_section "Installing Packages"
+
+    local packages_file="packages.yml"
+
+    # Check if yq is available for YAML parsing
+    if ! command_exists yq; then
+        if prompt_user "yq (YAML parser) is required. Install it?"; then
+            install_yq || {
+                print_error "Failed to install yq"
+                return 1
+            }
+        else
+            print_skip "Package installation (requires yq)"
+            return 0
+        fi
+    fi
+
+    if [[ ! -f "$packages_file" ]]; then
+        print_warning "packages.yml not found, skipping package installation"
+        return 0
+    fi
+
+    case "$CFG_OS" in
+        linux)
+            install_linux_packages "$packages_file"
             ;;
-        "debian")
-            _distro="DPKG"
-            return
+        macos)
+            install_macos_packages "$packages_file"
             ;;
-        "ubuntu")
-            _distro="DPKG"
-            return
+        windows)
+            install_windows_packages "$packages_file"
             ;;
-        "centos")
-            _distro="YUM"
-            return
+        *)
+            print_warning "Package installation not supported for $CFG_OS"
             ;;
-        "fedora")
-            _distro="YUM"
-            return
+    esac
+}
+
+# Install Linux packages
+install_linux_packages() {
+    local packages_file="$1"
+    local failed_packages=()
+    local installed_packages=()
+
+    # Get package list
+    local packages=()
+    mapfile -t packages < <(yq e '.PackageManager[]' "$packages_file" 2>/dev/null)
+
+    # Add distro-specific packages
+    case "$DISTRO" in
+        PACMAN)
+            mapfile -t -O ${#packages[@]} packages < <(yq e '.linux.arch[]' "$packages_file" 2>/dev/null)
             ;;
-        "opensuse" | "suse")
-            _distro="ZYPPER"
-            return
+        APT)
+            mapfile -t -O ${#packages[@]} packages < <(yq e '.linux.debian[]' "$packages_file" 2>/dev/null)
             ;;
-        "gentoo")
-            _distro="PORTAGE"
-            return
+        DNF)
+            mapfile -t -O ${#packages[@]} packages < <(yq e '.linux.rhel[]' "$packages_file" 2>/dev/null)
             ;;
+    esac
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        print_warning "No packages found in configuration"
+        return 0
+    fi
+
+    print_info "Found ${#packages[@]} packages to install"
+
+    # Update package database first
+    if prompt_user "Update package database before installing?"; then
+        case "$DISTRO" in
+            PACMAN) $PRIVILEGE_TOOL pacman -Sy ;;
+            APT) $PRIVILEGE_TOOL apt update ;;
+            DNF) $PRIVILEGE_TOOL dnf check-update || true ;;
+            ZYPPER) $PRIVILEGE_TOOL zypper refresh ;;
+            PORTAGE) $PRIVILEGE_TOOL emerge --sync ;;
         esac
     fi
 
-    # Fallback method if /etc/os-release doesn't provide the information
-    if [ -f /etc/issue ]; then
-        _found_arch PACMAN "Arch Linux" && return
-        _found_arch DPKG "Debian GNU/Linux" && return
-        _found_arch DPKG "Ubuntu" && return
-        _found_arch YUM "CentOS" && return
-        _found_arch YUM "Red Hat" && return
-        _found_arch YUM "Fedora" && return
-        _found_arch ZYPPER "SUSE" && return
-        _found_arch PORTAGE "Gentoo" && return
-    fi
+    # Install packages
+    for package in "${packages[@]}"; do
+        [[ -z "$package" ]] && continue
 
-    # Check for package managers and prompt the user if none found
-    local available_package_managers=("apt" "pacman" "portage" "yum" "zypper")
-    for manager in "${available_package_managers[@]}"; do
-        if command -v "$manager" &>/dev/null; then
-            _distro="$manager"
-            return
-        fi
+        print_info "Installing $package..."
+
+        case "$DISTRO" in
+            PACMAN)
+                if pacman -Q "$package" &>/dev/null; then
+                    print_info "$package already installed"
+                    continue
+                fi
+                if $PRIVILEGE_TOOL pacman -S --noconfirm "$package"; then
+                    installed_packages+=("$package")
+                else
+                    failed_packages+=("$package")
+                fi
+                ;;
+            APT)
+                if dpkg -l "$package" 2>/dev/null | grep -q "^ii"; then
+                    print_info "$package already installed"
+                    continue
+                fi
+                if $PRIVILEGE_TOOL apt install -y "$package"; then
+                    installed_packages+=("$package")
+                else
+                    failed_packages+=("$package")
+                fi
+                ;;
+            DNF)
+                if rpm -q "$package" &>/dev/null; then
+                    print_info "$package already installed"
+                    continue
+                fi
+                if $PRIVILEGE_TOOL dnf install -y "$package"; then
+                    installed_packages+=("$package")
+                else
+                    failed_packages+=("$package")
+                fi
+                ;;
+        esac
     done
 
-    # If none of the above methods work, prompt the user to specify the package manager
-    printf "Unable to detect the package manager. Please specify the package manager (e.g., apt, pacman, portage, yum, zypper): "
-    read -r user_package_manager
-    if [ -x "$(command -v "$user_package_manager")" ]; then
-        _distro="$user_package_manager"
-        return
-    else
-        _error "Specified package manager '$user_package_manager' not found. Exiting..."
-        exit 1
+    # Report results
+    if [[ ${#installed_packages[@]} -gt 0 ]]; then
+        print_success "Successfully installed ${#installed_packages[@]} packages"
+    fi
+
+    if [[ ${#failed_packages[@]} -gt 0 ]]; then
+        print_error "Failed to install ${#failed_packages[@]} packages: ${failed_packages[*]}"
     fi
 }
 
-#------------------------------------------------------------------------------
+# Install shell and plugins
+setup_shell() {
+    print_section "Setting Up Shell Environment"
 
-# Define directories to create
-user_dirs() {
-    directories=('.cache' '.config' '.scripts')
+    # Install Zsh if requested
+    if prompt_user "Install and configure Zsh?"; then
+        if ! command_exists zsh; then
+            print_info "Installing Zsh..."
+            case "$DISTRO" in
+                PACMAN) $PRIVILEGE_TOOL pacman -S --noconfirm zsh ;;
+                APT) $PRIVILEGE_TOOL apt install -y zsh ;;
+                DNF) $PRIVILEGE_TOOL dnf install -y zsh ;;
+            esac
+        fi
 
-    # Prompt the user if they want to use user-dirs.dirs
-    if prompt_user "Do you want to use the directories specified in user-dirs.dirs?"; then
-        # Check if ~/.config/user-dirs.dirs exists
-        config_dirs_file="$HOME/.config/user-dirs.dirs"
-        if [ -f "$config_dirs_file" ]; then
-            echo "Config file $config_dirs_file exists. Proceeding..."
+        if command_exists zsh; then
+            if prompt_user "Change default shell to Zsh?"; then
+                local zsh_path
+                zsh_path="$(which zsh)"
+                if chsh -s "$zsh_path"; then
+                    print_success "Default shell changed to Zsh"
+                    print_warning "Please log out and log back in to apply changes"
+                else
+                    print_error "Failed to change default shell"
+                fi
+            fi
+
+            # Install Zsh plugins
+            install_zsh_plugins
         else
-            echo "Error: Config file $config_dirs_file not found. Please check your configuration."
-            exit 1
+            print_error "Zsh installation failed"
         fi
-
-        # Prompt the user if they want to change directory names
-        if prompt_user "Do you want to change the directory names to lowercase?"; then
-            # Function to change directory names from uppercase to lowercase
-            change_dir_names() {
-                local config_file="$HOME/.config/user-dirs.dirs"
-
-                # Check if the system is not macOS
-                if [[ ! "$OSTYPE" == "darwin"* ]]; then
-                    # Check if the config file exists
-                    if [ -f "$config_file" ]; then
-                        echo "Changing directory names from uppercase to lowercase..."
-
-                        # Read the lines from the config file and process them
-                        while read -r line; do
-                            # Extract variable name and path from each line
-                            if [[ $line =~ ^[[:space:]]*([A-Z_]+)=\"(.+)\" ]]; then
-                                var_name="${BASH_REMATCH[1]}"
-                                var_path="${BASH_REMATCH[2]}"
-
-                                # Convert the variable name to lowercase
-                                var_name_lowercase="$(echo "$var_name" | tr '[:upper:]' '[:lower:]')"
-
-                                # Check if the directory exists
-                                if [ -d "$var_path" ]; then
-                                    # Rename the directory to lowercase
-                                    new_var_path="$HOME/${var_name_lowercase}"
-                                    mv "$var_path" "$new_var_path"
-                                    echo "Renamed $var_path to $new_var_path"
-                                fi
-                            fi
-                        done <"$config_file"
-
-                        echo "Directory names changed successfully."
-                    else
-                        echo "The config file $config_file does not exist. Skipping directory name changes."
-                    fi
-                else
-                    echo "macOS detected. Skipping directory name changes."
-                fi
-            }
-
-            # Run the function to change directory names
-            change_dir_names
-        elif prompt_user "Do you want to change the directory names to uppercase?"; then
-            # Function to change directory names from lowercase to uppercase
-            change_dir_names() {
-                local config_file="$HOME/.config/user-dirs.dirs"
-
-                # Check if the system is not macOS
-                if [[ ! "$OSTYPE" == "darwin"* ]]; then
-                    # Check if the config file exists
-                    if [ -f "$config_file" ]; then
-                        echo "Changing directory names from lowercase to uppercase..."
-
-                        # Read the lines from the config file and process them
-                        while read -r line; do
-                            # Extract variable name and path from each line
-                            if [[ $line =~ ^[[:space:]]*([A-Z_]+)=\"(.+)\" ]]; then
-                                var_name="${BASH_REMATCH[1]}"
-                                var_path="${BASH_REMATCH[2]}"
-
-                                # Convert the variable name to uppercase
-                                var_name_uppercase="$(echo "$var_name" | tr '[:lower:]' '[:upper:]')"
-
-                                # Check if the directory exists
-                                if [ -d "$var_path" ]; then
-                                    # Rename the directory to uppercase
-                                    new_var_path="$HOME/${var_name_uppercase}"
-                                    mv "$var_path" "$new_var_path"
-                                    echo "Renamed $var_path to $new_var_path"
-                                fi
-                            fi
-                        done <"$config_file"
-
-                        echo "Directory names changed successfully."
-                    else
-                        echo "The config file $config_file does not exist. Skipping directory name changes."
-                    fi
-                else
-                    echo "macOS detected. Skipping directory name changes."
-                fi
-            }
-
-            # Run the function to change directory names
-            change_dir_names
-            #xdg-user-dirs-update
-        fi
+    else
+        print_skip "Zsh setup"
     fi
+}
 
-    # Create needed dirs and set proper permissions
-    for d in "${directories[@]}"; do
-        full_path="$HOME/$d"
-        if [ ! -d "$full_path" ]; then
-            mkdir -p "$full_path"
-            # Assuming $USER is defined or replace it with the desired user
-            chown -R "$USER" "$full_path"
-            echo "Created $full_path"
+# Install Zsh plugins
+install_zsh_plugins() {
+    local plugins_dir="$HOME/.config/zsh/plugins"
+    local plugins=(
+        "zsh-you-should-use:https://github.com/MichaelAquilina/zsh-you-should-use.git"
+        "zsh-syntax-highlighting:https://github.com/zsh-users/zsh-syntax-highlighting.git"
+        "zsh-autosuggestions:https://github.com/zsh-users/zsh-autosuggestions.git"
+    )
+
+    create_dir "$plugins_dir"
+
+    for plugin_info in "${plugins[@]}"; do
+        local plugin_name="${plugin_info%%:*}"
+        local plugin_url="${plugin_info##*:}"
+        local plugin_path="$plugins_dir/$plugin_name"
+
+        if [[ -d "$plugin_path" ]]; then
+            print_info "$plugin_name already installed"
+            if prompt_user "Update $plugin_name?"; then
+                (cd "$plugin_path" && git pull) && print_success "Updated $plugin_name"
+            fi
+        else
+            print_info "Installing $plugin_name..."
+            if git clone "$plugin_url" "$plugin_path"; then
+                print_success "Installed $plugin_name"
+            else
+                print_error "Failed to install $plugin_name"
+            fi
         fi
     done
 }
 
-#------------------------------------------------------------------------------
-
-# Update system
-linux_update_system() {
-    # Prompt the user if they want to update the system
-    prompt_user "Do you want to update the system?" Y || {
-        echo "System update skipped."
-        return
-    }
-
-    # Continue with system update based on detected package manager
-    case "$_distro" in
-    "PACMAN")
-        "$PRIVILEGE_TOOL" pacman -Syyy && "$PRIVILEGE_TOOL" pacman -Syu --noconfirm
-        ;;
-    "DPKG")
-        "$PRIVILEGE_TOOL" apt-get update && "$PRIVILEGE_TOOL" apt-get upgrade -y
-        ;;
-    "YUM")
-        "$PRIVILEGE_TOOL" yum update -y
-        ;;
-    "ZYPPER")
-        "$PRIVILEGE_TOOL" zypper --non-interactive update
-        ;;
-    "PORTAGE")
-        "$PRIVILEGE_TOOL" emerge --sync && "$PRIVILEGE_TOOL" emerge --ask --update --deep --newuse @world
-        ;;
-    *)
-        echo "Package manager not supported."
-        return 1
-        ;;
-    esac
-}
-
-#------------------------------------------------------------------------------
-
-linux_install_packages() {
-    local failed_packages=()
-    local any_failures=false
-    local packages_file="packages.yml"
-
-    # Check if yq is available
-    if ! command -v yq &>/dev/null; then
-        echo "Error: yq (YAML parser) is not installed or not found."
-        return 1
-    fi
-
-    # Read package names from packages.yml under PackageManager for most distributions
-    local packages=()
-    if [[ -f "$packages_file" ]]; then
-        while IFS= read -r package; do
-            packages+=("$package")
-        done < <(yq e '.PackageManager[]' "$packages_file" 2>/dev/null)
-    else
-        echo "Error: packages.yml not found."
-        return 1
-    fi
-
-    # Read the package manager type detected by _distro_detect()
-    case "$_distro" in
-    "PACMAN")
-        # Read additional package names from arch section if present
-        if [[ -f "$packages_file" ]]; then
-            while IFS= read -r package; do
-                packages+=("$package")
-            done < <(yq e '.arch[]' "$packages_file" 2>/dev/null)
-        fi
-
-        # Installation using Pacman
-        for package in "${packages[@]}"; do
-            if ! pacman -Q "$package" &>/dev/null; then
-                if ! "$PRIVILEGE_TOOL" pacman -S --noconfirm "$package"; then
-                    failed_packages+=("$package")
-                    any_failures=true
-                fi
-            fi
-        done
-        ;;
-    "DPKG")
-        # Try installing packages with dpkg
-        for package in "${packages[@]}"; do
-            if ! dpkg-query -W "$package" &>/dev/null; then
-                if ! "$PRIVILEGE_TOOL" apt-get install -y "$package"; then
-                    failed_packages+=("$package")
-                    any_failures=true
-                fi
-            fi
-        done
-        ;;
-    "YUM")
-        # Try installing packages with yum
-        for package in "${packages[@]}"; do
-            if ! rpm -q "$package" &>/dev/null; then
-                if ! "$PRIVILEGE_TOOL" yum install -y "$package"; then
-                    failed_packages+=("$package")
-                    any_failures=true
-                fi
-            fi
-        done
-        ;;
-    "ZYPPER")
-        # Try installing packages with zypper
-        for package in "${packages[@]}"; do
-            if ! rpm -q "$package" &>/dev/null; then
-                if ! "$PRIVILEGE_TOOL" zypper --non-interactive install "$package"; then
-                    failed_packages+=("$package")
-                    any_failures=true
-                fi
-            fi
-        done
-        ;;
-    "PORTAGE")
-        # Try installing packages with emerge for Gentoo
-        if [[ -f "$packages_file" ]]; then
-            # Read package names from packages.yml under gentoo
-            gentoo_packages=()
-            while IFS= read -r package; do
-                gentoo_packages+=("$package")
-            done < <(yq e '.gentoo[]' "$packages_file" 2>/dev/null)
-        else
-            echo "Error: packages.yml not found."
-            return 1
-        fi
-
-        for package in "${gentoo_packages[@]}"; do
-            if [ "$package" != "" ]; then
-                if ! equery list "$package" &>/dev/null; then
-                    if ! "$PRIVILEGE_TOOL" emerge "$package"; then
-                        failed_packages+=("$package")
-                        any_failures=true
-                    fi
-                fi
-            fi
-        done
-        ;;
-    *)
-        echo "Package manager not supported."
-        return 1
-        ;;
-    esac
-
-    # Check if any packages failed to install
-    if "$any_failures"; then
-        echo "Failed to install the following packages:"
-        printf '%s\n' "${failed_packages[@]}"
-        return 1
-    else
-        echo "All packages installed successfully."
-        return 0
-    fi
-}
-
-# Install Rust using rustup and install Rust packages from packages.yml
-install_rust() {
-    if command -v "rustup" &>/dev/null; then
-        echo "Installing Rust using rustup..."
-        CARGO_HOME=${XDG_DATA_HOME:-$HOME/.local/share}/cargo RUSTUP_HOME=${XDG_DATA_HOME:-$HOME/.local/share}/rustup bash -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y'
-    else
-        echo "Rust is already installed."
-    fi
-
-    # Read Rust-specific packages from packages.yml under the 'rust' section
-    local rust_packages=()
-    if [[ -f "$packages_file" ]]; then
-        rust_packages=("$(yq '.rust[]' "$packages_file" 2>/dev/null)")
-        #rust_packages=("$(grep 'rust:' -A 1 "$packages_file" | grep -v 'rust:' | grep -vE '^\s*$' | sed 's/^\s*-\s*//')")
-    else
-        echo "Error: packages.yml not found."
-        return 1
-    fi
-
-    # Install Rust packages using cargo if rust is installed
-    if command -v "cargo" &>/dev/null; then
-        for package in "${rust_packages[@]}"; do
-            if ! cargo install "$package"; then
-                echo "Failed to install Rust package: $package"
-                return 1
-            fi
-        done
-    else
-        echo "Cargo not found. Rust packages installation skipped."
-    fi
-}
-
-# Function to install Node Version Manager (NVM)
-install_nvm() {
-    # Set NVM_DIR environment variable
-    export NVM_DIR="$HOME/.config/nvm"
-    if [ ! -d "$NVM_DIR" ]; then
-        mkdir -p "$NVM_DIR"
-    fi
-    # Download and install or update NVM script
-    if command -v nvm &>/dev/null; then
-        echo "Updating Node Version Manager (NVM)..."
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
-    else
-        echo "Installing Node Version Manager (NVM)..."
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
-    fi
-    # Source NVM script to enable it in the current shell
-    if [ -s "$NVM_DIR/nvm.sh" ]; then
-        echo "Sourcing NVM script..."
-        . "$NVM_DIR/nvm.sh"
-    else
-        echo "NVM script not found. Make sure installation was successful."
-        return 1
-    fi
-
-    # Verify installation
-    if command -v nvm &>/dev/null; then
-        echo "NVM installation completed successfully."
-        export NVM_DIR="$HOME/.config/nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"                   # This loads nvm
-        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" # This loads nvm bash_completion
-    else
-        echo "NVM installation failed."
-        return 1
-    fi
-}
-
-install_node() {
-    # Check if Node.js is already installed
-    if ! command -v node &>/dev/null; then
-        echo "Node.js is already installed."
-        return
-    fi
-
-    echo "Installing Node.js..."
-    # Set up environment variables for Node.js installation
-    export NVM_NODEJS_ORG_MIRROR=https://npm.taobao.org/mirrors/node/
-    export NODEJS_ORG_MIRROR=https://npm.taobao.org/mirrors/node/
-
-    # Install the latest stable version of Node.js using NVM
-    nvm
-    nvm install node
-    nvm use node
-    nvm install --lts
-    nvm alias default lts/* # Set LTS version as default
-
-    echo "Node.js installation completed successfully."
-}
-
-install_yarn() {
-    # Check if Yarn is already installed
-    if command -v yarn &>/dev/null; then
-        echo "Yarn is already installed."
-        return
-    fi
-
-    # Check if the .yarn directory exists
-    if [ -d "$HOME/.yarn" ]; then
-        echo "Removing existing .yarn directory..."
-        rm -rf "$HOME/.yarn"
-    fi
-
-    echo "Installing Yarn..."
-    # Install Yarn using npm
-    curl -o- -L https://yarnpkg.com/install.sh | bash
-    echo "Yarn installation completed successfully."
-}
-
-setup_tmux_plugins() {
-    local tpm_dir="$HOME/.config/tmux/plugins/tpm"
-    local plugins_dir="$HOME/.config/tmux/plugins"
-
-    # Ensure the plugins directory exists
-    if [ ! -d "$plugins_dir" ]; then
-        mkdir -p "$plugins_dir"
-    fi
-
-    # Ensure the TPM directory exists
-    if [ ! -d "$tpm_dir" ]; then
-        mkdir -p "$tpm_dir"
-    fi
-
-    if [ "$(ls -A "$tpm_dir")" ]; then
-        # TPM is already installed and directory is not empty, so we skip installation.
-        echo "TPM has been installed...skipping"
-    else
-        # If TPM directory doesn't exist or is empty, we proceed with installation.
-        if [ -d "$tpm_dir" ]; then
-            rm -rf "$tpm_dir" # Remove existing directory if it exists
-        fi
-        echo "Installing TPM..."
-        git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
-    fi
-}
-
-install_tailscale() {
-    if ! command -v tailscale &>/dev/null; then
-        curl -fsSL https://tailscale.com/install.sh | bash
-    fi
-}
-
+# Setup SSH
 setup_ssh() {
-    SSH_DIR="$HOME/.ssh"
-    if ! [[ -f "$SSH_DIR/authorized_keys" ]]; then
-        echo "Generating SSH keys"
-        mkdir -p "$SSH_DIR"
-        chmod 700 "$SSH_DIR"
-        ssh-keygen -b 4096 -t rsa -f "$SSH_DIR"/id_rsa -N '' -C "$USER@$HOSTNAME"
-        cat "$SSH_DIR"/id_rsa.pub >>"$SSH_DIR"/authorized_keys
+    print_section "Setting Up SSH"
+
+    local ssh_dir="$HOME/.ssh"
+
+    if [[ ! -f "$ssh_dir/id_rsa" ]]; then
+        if prompt_user "Generate SSH key pair?"; then
+            create_dir "$ssh_dir" 700
+
+            local email
+            print_color "$YELLOW" "Enter email for SSH key (or press Enter for $USER@$HOSTNAME): "
+            read -r email
+            email="${email:-$USER@$HOSTNAME}"
+
+            ssh-keygen -t rsa -b 4096 -f "$ssh_dir/id_rsa" -N '' -C "$email" && {
+                print_success "SSH key pair generated"
+                cat "$ssh_dir/id_rsa.pub" >> "$ssh_dir/authorized_keys"
+                chmod 600 "$ssh_dir/authorized_keys"
+                print_info "Public key added to authorized_keys"
+            }
+        fi
+    else
+        print_info "SSH key already exists"
     fi
 }
 
-linux_specific_steps() {
-    install_dotfiles
-    user_dirs
-    _distro_detect
-    check_privilege_tools
-    #set_locale
-    submodules
-    change_dir_names
-    #linux_update_system
-    install_yq
-    #install_rust
-    #install_nvm
-    #install_node
-    #install_yarn
-    install_tailscale
-    linux_install_packages
-    install_zsh_plugins
-    setup_tmux_plugins
-    setup_ssh
-    change_shell
+#======================================
+# Summary and Cleanup
+#======================================
+
+# Print installation summary
+print_installation_summary() {
+    print_header "Installation Summary"
+
+    if [[ ${#INSTALL_SUMMARY[@]} -gt 0 ]]; then
+        print_section "Successful Operations"
+        printf '%s\n' "${INSTALL_SUMMARY[@]}"
+    fi
+
+    if [[ ${#SKIPPED_ITEMS[@]} -gt 0 ]]; then
+        print_section "Skipped Items"
+        printf '%s\n' "${SKIPPED_ITEMS[@]}"
+    fi
+
+    if [[ ${#FAILED_ITEMS[@]} -gt 0 ]]; then
+        print_section "Failed Operations"
+        printf '%s\n' "${FAILED_ITEMS[@]}"
+        echo
+        print_warning "Some operations failed. Check the log file: $LOG_FILE"
+    fi
+
+    echo
+    print_color "$GREEN$BOLD" "Installation completed!"
+    print_info "Log file: $LOG_FILE"
+
+    if [[ ${#FAILED_ITEMS[@]} -eq 0 ]]; then
+        print_color "$GREEN" "🎉 All operations completed successfully!"
+    else
+        print_color "$YELLOW" "⚠️  Installation completed with ${#FAILED_ITEMS[@]} issues"
+    fi
+
+    echo
+    print_info "Next steps:"
+    print_color "$CYAN" "  • Restart your shell or run: exec \$SHELL"
+    print_color "$CYAN" "  • Review configuration files in: $DOTFILES_DIR"
+    print_color "$CYAN" "  • Use 'config status' to manage dotfiles"
+    echo
 }
 
-#------------------------------------------------------------------------------
-
-#------------------------------------------------------------------------------
-
-#==============================================================================
-
 #======================================
-# MacOS
+# Main Installation Flow
 #======================================
 
-macos_specific_steps() {
-    set_locale
-    macos_install_packages
-    git_install_macos
-
-}
-
-#==============================================================================
-
-#======================================
-# Windows
-#======================================
-
-windows_specific_steps() {
-    check_git_installed_windows
-    install_dependencies_windows
-    windows_install_packages
-    git_install_windows
-    symlink_configuration_files_windows
-}
-#------------------------------------------------------------------------------
-
-#==============================================================================
-
-#======================================
-# Main Installation
-#======================================
-
-# Main Installation
-main_installation() {
-    echo "Starting main installation..."
-
-    case "$OSTYPE" in
-    linux-gnu*)
-        linux_specific_steps
-        ;;
-    darwin*)
-        macos_specific_steps
-        ;;
-    msys* | cygwin*)
-        windows_specific_steps
-        ;;
-    *)
-        handle_error "Unsupported operating system."
-        ;;
-    esac
-
-    sleep 1
-}
-
-# Script entry point
+# Main installation function
 main() {
-    echo "Log File for Dotfiles Installation" >"$LOG_FILE"
-    check_download_dependencies
-    check_os
-    main_installation
-    handle_complete "Installation completed successfully."
+    # Initialize
+    setup_logging
+
+    print_header "Enhanced Dotfiles Installation"
+    print_info "Starting installation for user: $USER"
+    print_info "Log file: $LOG_FILE"
+
+    # Pre-flight checks
+    detect_os
+    detect_privilege_tools
+
+    if [[ "$CFG_OS" == "linux" ]]; then
+        detect_linux_distro || exit 1
+    fi
+
+    # Installation steps
+    local steps=(
+        "install_dotfiles:Install dotfiles repository"
+        "setup_user_dirs:Setup user directories"
+        "install_packages:Install system packages"
+        "setup_shell:Setup shell environment"
+        "setup_ssh:Setup SSH configuration"
+    )
+
+    echo
+    print_color "$YELLOW$BOLD" "The following steps will be performed:"
+    for i in "${!steps[@]}"; do
+        local step_desc="${steps[i]#*:}"
+        print_color "$CYAN" "$((i + 1)). $step_desc"
+    done
+
+    echo
+    if ! prompt_user "Continue with installation?"; then
+        print_info "Installation cancelled by user"
+        exit 0
+    fi
+
+    # Execute installation steps
+    for step_info in "${steps[@]}"; do
+        local step_func="${step_info%%:*}"
+        local step_desc="${step_info#*:}"
+
+        echo
+        print_section "$step_desc"
+
+        if "$step_func"; then
+            print_success "$step_desc completed"
+        else
+            print_error "$step_desc failed"
+        fi
+    done
+
+    # Show summary
+    print_installation_summary
+
+    log_message "INFO" "Installation process completed"
 }
 
-main "$@"
