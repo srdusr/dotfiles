@@ -1,33 +1,35 @@
 # Dotfiles Management System
 if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
 
-    # Detect OS
-    case "$(uname -s)" in
-        Linux)   CFG_OS="linux" ;;
-        Darwin)  CFG_OS="macos" ;;
-        MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
-        *)       CFG_OS="other" ;;
-    esac
-
     # Core git wrapper with repository as work-tree
     _config() {
         git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
     }
 
+    # Detect OS
+    case "$(uname -s)" in
+        Linux)    CFG_OS="linux" ;;
+        Darwin)  CFG_OS="macos" ;;
+        MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
+        *)        CFG_OS="other" ;;
+    esac
+
     # Map system path to repository path
     _repo_path() {
         local f="$1"
 
-        # Already in repo structure - return as-is
+        # Check for paths that should go to the repository root
         case "$f" in
-            linux/*|macos/*|windows/*|common/*|profile/*)
+            common/*|linux/*|macos/*|windows/*|profile/*|README.md)
+                # If path already looks like a repo path, use it as is
                 echo "$f"
                 return
                 ;;
+            # Otherwise, convert to a relative path
+            "$HOME/"*)
+                f="${f#$HOME/}"
+                ;;
         esac
-
-        # Convert absolute path to relative from HOME
-        [[ "$f" = "$HOME"* ]] && f="${f#$HOME/}"
 
         # Default: put under OS-specific home
         echo "$CFG_OS/home/$f"
@@ -36,8 +38,17 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     # Map repository path back to system path
     _sys_path() {
         local repo_path="$1"
-
         case "$repo_path" in
+            # Files in the root of the repo
+            common/*|linux/*|macos/*|windows/*|profile/*)
+                # For directories, map to the repository directory
+                echo "$HOME/.cfg/$repo_path"
+                ;;
+            README.md)
+                # Specific file in the root
+                echo "$HOME/.cfg/README.md"
+                ;;
+            # Otherwise, map to the home directory
             */home/*)
                 echo "$HOME/${repo_path#*/home/}"
                 ;;
@@ -47,102 +58,50 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         esac
     }
 
-    # Enhanced config command
+    # NOTE: can change `config` to whatever you feel comfortable ie. dotfiles, dots, cfg etc.
     config() {
         local cmd="$1"; shift
-
         case "$cmd" in
             add)
-                # Auto-sync before adding
-                config auto-sync
-
-                for f in "$@"; do
-                    # Convert to absolute path
-                    [[ "$f" != /* ]] && f="$HOME/$f"
-
-                    if [[ ! -e "$f" ]]; then
-                        echo "File not found: $f" >&2
-                        continue
-                    fi
-
-                    # Get repository path
-                    local repo_path="$(_repo_path "$f")"
+                local file_path
+                for file_path in "$@"; do
+                    local repo_path="$(_repo_path "$file_path")"
                     local full_repo_path="$HOME/.cfg/$repo_path"
-
-                    # Create directory structure in repository
                     mkdir -p "$(dirname "$full_repo_path")"
-
-                    # Copy file to repository structure
-                    cp "$f" "$full_repo_path"
-
-                    # Add to git using the structured path
+                    cp -a "$file_path" "$full_repo_path"
                     _config add "$repo_path"
-
-                    echo "Added: $f → $repo_path"
+                    echo "Added: $file_path -> $repo_path"
                 done
                 ;;
 
             rm)
-                for f in "$@"; do
-                    local repo_path="$(_repo_path "$f")"
+                local file_path
+                for file_path in "$@"; do
+                    local repo_path="$(_repo_path "$file_path")"
                     _config rm "$repo_path"
                     rm -f "$HOME/.cfg/$repo_path"
-                    echo "Removed: $f ($repo_path)"
+                    echo "Removed: $file_path ($repo_path)"
                 done
                 ;;
 
             sync)
-                # Sync files between home and repository structure
-                local direction="${1:-to-repo}"  # to-repo or from-repo
-                shift
-
-                if [[ $# -gt 0 ]]; then
-                    # Sync specific files
-                    for f in "$@"; do
-                        [[ "$f" != /* ]] && f="$HOME/$f"
-                        local repo_path="$(_repo_path "$f")"
-                        local full_repo_path="$HOME/.cfg/$repo_path"
-
-                        case "$direction" in
-                            to-repo)
-                                if [[ -e "$f" ]]; then
-                                    mkdir -p "$(dirname "$full_repo_path")"
-                                    cp "$f" "$full_repo_path"
-                                    echo "Synced to repo: $f → $repo_path"
-                                fi
-                                ;;
-                            from-repo)
-                                if [[ -e "$full_repo_path" ]]; then
-                                    mkdir -p "$(dirname "$f")"
-                                    cp "$full_repo_path" "$f"
-                                    echo "Synced from repo: $repo_path → $f"
-                                fi
-                                ;;
-                        esac
-                    done
-                else
-                    # Sync all tracked files
-                    _config ls-files | while read -r repo_path; do
-                        local sys_path="$(_sys_path "$repo_path")"
-                        local full_repo_path="$HOME/.cfg/$repo_path"
-
-                        case "$direction" in
-                            to-repo)
-                                if [[ -e "$sys_path" ]]; then
-                                    cp "$sys_path" "$full_repo_path"
-                                    echo "Synced to repo: $sys_path → $repo_path"
-                                fi
-                                ;;
-                            from-repo)
-                                if [[ -e "$full_repo_path" ]]; then
-                                    mkdir -p "$(dirname "$sys_path")"
-                                    cp "$full_repo_path" "$sys_path"
-                                    echo "Synced from repo: $repo_path → $sys_path"
-                                fi
-                                ;;
-                        esac
-                    done
-                fi
+                local direction="${1:-to-repo}"; shift
+                _config ls-files | while read -r repo_file; do
+                    local sys_file="$(_sys_path "$repo_file")"
+                    local full_repo_path="$HOME/.cfg/$repo_file"
+                    if [[ "$direction" == "to-repo" ]]; then
+                        if [[ -e "$sys_file" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
+                            cp "$sys_file" "$full_repo_path"
+                            echo "Synced to repo: $sys_file"
+                        fi
+                    elif [[ "$direction" == "from-repo" ]]; then
+                        if [[ -e "$full_repo_path" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
+                            mkdir -p "$(dirname "$sys_file")"
+                            cp "$full_repo_path" "$sys_file"
+                            echo "Synced from repo: $sys_file"
+                        fi
+                    fi
+                done
                 ;;
 
             status)
@@ -158,7 +117,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                         fi
                     fi
                 done < <(_config ls-files)
-
                 if [[ ${#auto_synced[@]} -gt 0 ]]; then
                     echo "=== Auto-synced Files ==="
                     for repo_file in "${auto_synced[@]}"; do
@@ -166,98 +124,289 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     done
                     echo
                 fi
-
-                echo "=== Git Status ==="
                 _config status
-
                 echo
-                #echo "=== Path Mappings ==="
-                #_config ls-files | while read -r repo_file; do
-                #    echo "$repo_file ↔ $(_sys_path "$repo_file")"
-                #done
                 ;;
 
             deploy)
-                # Deploy from repository structure to system
-                echo "Deploying dotfiles from repository structure..."
                 _config ls-files | while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
-
                     if [[ -e "$full_repo_path" ]]; then
-                        echo "Deploying: $repo_file → $sys_file"
                         mkdir -p "$(dirname "$sys_file")"
-                        cp "$full_repo_path" "$sys_file"
+                        cp -a "$full_repo_path" "$sys_file"
+                        echo "Deployed: $repo_file -> $sys_file"
                     fi
-                done
-                ;;
-
-            auto-sync)
-                # Auto-sync all modified tracked files
-                _config ls-files | while read -r repo_file; do
-                    local sys_file="$(_sys_path "$repo_file")"
-                    local full_repo_path="$HOME/.cfg/$repo_file"
-
-                    if [[ -e "$sys_file" && -e "$full_repo_path" ]]; then
-                        if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
-                            cp "$sys_file" "$full_repo_path"
-                            echo "Auto-synced: $sys_file → $repo_file"
-                        fi
-                    fi
-                done
-                ;;
-
-            ls-structure)
-                # Show repository structure
-                echo "Repository structure:"
-                _config ls-files | sed 's|/[^/]*$|/|' | sort -u | while read -r dir; do
-                    echo "  $dir"
-                done
-                ;;
-
-            ls-mappings)
-                # List all tracked files with mappings
-                _config ls-files | while read -r repo_file; do
-                    local sys_file="$(_sys_path "$repo_file")"
-                    echo "$repo_file ↔ $sys_file"
                 done
                 ;;
 
             *)
-                # Pass through to git
                 _config "$cmd" "$@"
                 ;;
         esac
     }
-
-    # Completion
-    _config_completion() {
-        local cur="${COMP_WORDS[COMP_CWORD]}"
-        case "${COMP_WORDS[1]}" in
-            add|edit)
-                COMPREPLY=($(compgen -f -- "$cur"))
-                ;;
-            sync)
-                if [[ ${COMP_WORDS[2]} == "to-repo" || ${COMP_WORDS[2]} == "from-repo" ]]; then
-                    COMPREPLY=($(compgen -f -- "$cur"))
-                else
-                    COMPREPLY=($(compgen -W "to-repo from-repo" -- "$cur"))
-                fi
-                ;;
-        esac
-    }
-
-    compdef _config_completion config
-    #complete -F _config_completion config
 fi
-# Git
-## Use gh instead of git (fast GitHub command line client).
-#if type gh >/dev/null; then
-#  alias git=gh
-#  if type compdef >/dev/null 2>/dev/null; then
-#     compdef gh=git
-#  fi
+## Dotfiles Management System
+#if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
+#
+#    # Detect OS
+#    case "$(uname -s)" in
+#        Linux)   CFG_OS="linux" ;;
+#        Darwin)  CFG_OS="macos" ;;
+#        MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
+#        *)       CFG_OS="other" ;;
+#    esac
+#
+#    # Core git wrapper with repository as work-tree
+#    _config() {
+#        git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
+#    }
+#
+#    # Map system path to repository path
+#    _repo_path() {
+#        local f="$1"
+#
+#        # Already in repo structure - return as-is
+#        case "$f" in
+#            linux/*|macos/*|windows/*|common/*|profile/*|.*)
+#                echo "$f"
+#                return
+#                ;;
+#        esac
+#
+#        # Convert absolute path to relative from HOME
+#        [[ "$f" = "$HOME"* ]] && f="${f#$HOME/}"
+#
+#        # Default: put under OS-specific home
+#        echo "$CFG_OS/home/$f"
+#    }
+#
+#    # Map repository path back to system path
+#    _sys_path() {
+#        local repo_path="$1"
+#
+#        case "$repo_path" in
+#            */home/*)
+#                echo "$HOME/${repo_path#*/home/}"
+#                ;;
+#            *)
+#                echo "/$repo_path"
+#                ;;
+#        esac
+#    }
+#
+#    # Enhanced config command
+#    config() {
+#        local cmd="$1"; shift
+#
+#        case "$cmd" in
+#            add)
+#                # Auto-sync before adding
+#                config auto-sync
+#
+#                for f in "$@"; do
+#                    # Convert to absolute path
+#                    [[ "$f" != /* ]] && f="$HOME/$f"
+#
+#                    if [[ ! -e "$f" ]]; then
+#                        echo "File not found: $f" >&2
+#                        continue
+#                    fi
+#
+#                    # Get repository path
+#                    local repo_path="$(_repo_path "$f")"
+#                    local full_repo_path="$HOME/.cfg/$repo_path"
+#
+#                    # Create directory structure in repository
+#                    mkdir -p "$(dirname "$full_repo_path")"
+#
+#                    # Copy file to repository structure
+#                    cp "$f" "$full_repo_path"
+#
+#                    # Add to git using the structured path
+#                    _config add "$repo_path"
+#
+#                    echo "Added: $f → $repo_path"
+#                done
+#                ;;
+#
+#            rm)
+#                for f in "$@"; do
+#                    local repo_path="$(_repo_path "$f")"
+#                    _config rm "$repo_path"
+#                    rm -f "$HOME/.cfg/$repo_path"
+#                    echo "Removed: $f ($repo_path)"
+#                done
+#                ;;
+#
+#            sync)
+#                # Sync files between home and repository structure
+#                local direction="${1:-to-repo}"  # to-repo or from-repo
+#                shift
+#
+#                if [[ $# -gt 0 ]]; then
+#                    # Sync specific files
+#                    for f in "$@"; do
+#                        [[ "$f" != /* ]] && f="$HOME/$f"
+#                        local repo_path="$(_repo_path "$f")"
+#                        local full_repo_path="$HOME/.cfg/$repo_path"
+#
+#                        case "$direction" in
+#                            to-repo)
+#                                if [[ -e "$f" ]]; then
+#                                    mkdir -p "$(dirname "$full_repo_path")"
+#                                    cp "$f" "$full_repo_path"
+#                                    echo "Synced to repo: $f → $repo_path"
+#                                fi
+#                                ;;
+#                            from-repo)
+#                                if [[ -e "$full_repo_path" ]]; then
+#                                    mkdir -p "$(dirname "$f")"
+#                                    cp "$full_repo_path" "$f"
+#                                    echo "Synced from repo: $repo_path → $f"
+#                                fi
+#                                ;;
+#                        esac
+#                    done
+#                else
+#                    # Sync all tracked files
+#                    _config ls-files | while read -r repo_path; do
+#                        local sys_path="$(_sys_path "$repo_path")"
+#                        local full_repo_path="$HOME/.cfg/$repo_path"
+#
+#                        case "$direction" in
+#                            to-repo)
+#                                if [[ -e "$sys_path" ]]; then
+#                                    cp "$sys_path" "$full_repo_path"
+#                                    echo "Synced to repo: $sys_path → $repo_path"
+#                                fi
+#                                ;;
+#                            from-repo)
+#                                if [[ -e "$full_repo_path" ]]; then
+#                                    mkdir -p "$(dirname "$sys_path")"
+#                                    cp "$full_repo_path" "$sys_path"
+#                                    echo "Synced from repo: $repo_path → $sys_path"
+#                                fi
+#                                ;;
+#                        esac
+#                    done
+#                fi
+#                ;;
+#
+#            status)
+#                # Auto-sync any modified files
+#                local auto_synced=()
+#                while read -r repo_file; do
+#                    local sys_file="$(_sys_path "$repo_file")"
+#                    local full_repo_path="$HOME/.cfg/$repo_file"
+#                    if [[ -e "$sys_file" && -e "$full_repo_path" ]]; then
+#                        if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
+#                            \cp -f "$sys_file" "$full_repo_path"
+#                            auto_synced+=("$repo_file")
+#                        fi
+#                    fi
+#                done < <(_config ls-files)
+#
+#                if [[ ${#auto_synced[@]} -gt 0 ]]; then
+#                    echo "=== Auto-synced Files ==="
+#                    for repo_file in "${auto_synced[@]}"; do
+#                        echo "synced: $(_sys_path "$repo_file") → $repo_file"
+#                    done
+#                    echo
+#                fi
+#
+#                echo "=== Git Status ==="
+#                _config status
+#
+#                echo
+#                #echo "=== Path Mappings ==="
+#                #_config ls-files | while read -r repo_file; do
+#                #    echo "$repo_file ↔ $(_sys_path "$repo_file")"
+#                #done
+#                ;;
+#
+#            deploy)
+#                # Deploy from repository structure to system
+#                echo "Deploying dotfiles from repository structure..."
+#                _config ls-files | while read -r repo_file; do
+#                    local sys_file="$(_sys_path "$repo_file")"
+#                    local full_repo_path="$HOME/.cfg/$repo_file"
+#
+#                    if [[ -e "$full_repo_path" ]]; then
+#                        echo "Deploying: $repo_file → $sys_file"
+#                        mkdir -p "$(dirname "$sys_file")"
+#                        cp "$full_repo_path" "$sys_file"
+#                    fi
+#                done
+#                ;;
+#
+#            auto-sync)
+#                # Auto-sync all modified tracked files
+#                _config ls-files | while read -r repo_file; do
+#                    local sys_file="$(_sys_path "$repo_file")"
+#                    local full_repo_path="$HOME/.cfg/$repo_file"
+#
+#                    if [[ -e "$sys_file" && -e "$full_repo_path" ]]; then
+#                        if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
+#                            cp "$sys_file" "$full_repo_path"
+#                            echo "Auto-synced: $sys_file → $repo_file"
+#                        fi
+#                    fi
+#                done
+#                ;;
+#
+#            ls-structure)
+#                # Show repository structure
+#                echo "Repository structure:"
+#                _config ls-files | sed 's|/[^/]*$|/|' | sort -u | while read -r dir; do
+#                    echo "  $dir"
+#                done
+#                ;;
+#
+#            ls-mappings)
+#                # List all tracked files with mappings
+#                _config ls-files | while read -r repo_file; do
+#                    local sys_file="$(_sys_path "$repo_file")"
+#                    echo "$repo_file ↔ $sys_file"
+#                done
+#                ;;
+#
+#            *)
+#                # Pass through to git
+#                _config "$cmd" "$@"
+#                ;;
+#        esac
+#    }
+#
+#    # Completion
+#    _config_completion() {
+#        local cur="${COMP_WORDS[COMP_CWORD]}"
+#        case "${COMP_WORDS[1]}" in
+#            add|edit)
+#                COMPREPLY=($(compgen -f -- "$cur"))
+#                ;;
+#            sync)
+#                if [[ ${COMP_WORDS[2]} == "to-repo" || ${COMP_WORDS[2]} == "from-repo" ]]; then
+#                    COMPREPLY=($(compgen -f -- "$cur"))
+#                else
+#                    COMPREPLY=($(compgen -W "to-repo from-repo" -- "$cur"))
+#                fi
+#                ;;
+#        esac
+#    }
+#
+#    compdef _config_completion config
+#    #complete -F _config_completion config
 #fi
+
+# Git
+# Use gh instead of git (fast GitHub command line client).
+if type gh >/dev/null; then
+  alias git=gh
+  if type compdef >/dev/null 2>/dev/null; then
+     compdef gh=git
+  fi
+fi
 #check_gh_installed() {
 #    if command -v gh &> /dev/null; then
 #        return 0  # gh is installed

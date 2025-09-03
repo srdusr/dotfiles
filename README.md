@@ -13,25 +13,9 @@
 Welcome, and make yourself at <b><i>$HOME</i></b>
 </h3>
 
-![1](assets/desktop.jpg)
+![1](common/assets/desktop.jpg)
 
 > Agnostic/cross-platform dotfiles (Linux/MacOS/Windows)
-
-- This repository is designed to be a bare Git dotfiles repository located in your home directory. 
-- Easy dotfiles management that respects the file hierarchy/XDG structure cross platform.
-- Custom `config` command that intelligently manages files across different operating systems.
-
-Example:
-```bash
-config add .bashrc # → linux/home/.bashrc
-config add /etc/issue # → linux/etc/issue
-config add README.md # → linux/home/README.md  (default, since no override)
-config add --to=root README.md # → README.md (repo root)
-config add --to=root docs/guide.md # → docs/guide.md (nested in repo root)
-config add --to=common README.md # → common/README.md
-config commit -m "Updated Dotfiles Management"
-config push -u origin main
-```
 
 ---
 
@@ -53,6 +37,20 @@ Linux:
 
 ---
 
+- This repository is designed to be a bare Git dotfiles repository located in your home directory. 
+- Easy dotfiles management that respects the file hierarchy/XDG structure cross platform.
+- Custom `config` command that intelligently manages files across different operating systems.
+
+Example:
+```bash
+config add .bashrc # → linux/home/.bashrc
+config add /etc/issue # → linux/etc/issue
+config commit -m "Updated Dotfiles Management"
+config push -u origin main
+```
+
+---
+
 ### Installing onto a new system (Manual)
 
 1. Avoid weird behaviour/recursion issues when `.cfg` tries to track itself
@@ -64,14 +62,12 @@ $ echo ".cfg" >> .gitignore
 2. Clone the repository
 
 ```bash
-# Linux/MacOS
+# Linux/MacOS/WSL
 git clone --bare https://github.com/srdusr/dotfiles.git $HOME/.cfg
-
-    Note: On Windows, you can use Git Bash or WSL. The process is the same.
 ```
 
 ```ps1
-# Windows
+# Windows (PowerShell)
 git clone --bare https://github.com/srdusr/dotfiles.git $env:USERPROFILE/.cfg
 ```
 
@@ -96,7 +92,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     # Detect OS
     case "$(uname -s)" in
         Linux)    CFG_OS="linux" ;;
-        Darwin)   CFG_OS="macos" ;;
+        Darwin)  CFG_OS="macos" ;;
         MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
         *)        CFG_OS="other" ;;
     esac
@@ -105,16 +101,18 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     _repo_path() {
         local f="$1"
 
-        # Already in repo structure - return as-is
+        # Check for paths that should go to the repository root
         case "$f" in
-            linux/*|macos/*|windows/*|common/*|profile/*|.*)
+            common/*|linux/*|macos/*|windows/*|profile/*|README.md)
+                # If path already looks like a repo path, use it as is
                 echo "$f"
                 return
                 ;;
+            # Otherwise, convert to a relative path
+            "$HOME/"*)
+                f="${f#$HOME/}"
+                ;;
         esac
-
-        # Convert absolute path to relative from HOME
-        [[ "$f" = "$HOME"* ]] && f="${f#$HOME/}"
 
         # Default: put under OS-specific home
         echo "$CFG_OS/home/$f"
@@ -124,8 +122,22 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     _sys_path() {
         local repo_path="$1"
         case "$repo_path" in
-            */home/*) echo "$HOME/${repo_path#*/home/}" ;;
-            *) echo "/$repo_path" ;;
+            # Files in the root of the repo
+            common/*|linux/*|macos/*|windows/*|profile/*)
+                # For directories, map to the repository directory
+                echo "$HOME/.cfg/$repo_path"
+                ;;
+            README.md)
+                # Specific file in the root
+                echo "$HOME/.cfg/README.md"
+                ;;
+            # Otherwise, map to the home directory
+            */home/*)
+                echo "$HOME/${repo_path#*/home/}"
+                ;;
+            *)
+                echo "/$repo_path"
+                ;;
         esac
     }
 
@@ -134,39 +146,9 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         local cmd="$1"; shift
         case "$cmd" in
             add)
-                local target_parent=""
-                # Allow --to=namespace (root, common, linux, macos, windows, profile)
-                while [[ "$1" =~ ^--to= ]]; do
-                    target_parent="${1#--to=}"
-                    shift
-                done
-
                 local file_path
                 for file_path in "$@"; do
-                    local repo_path
-                    if [[ -n "$target_parent" ]]; then
-                        case "$target_parent" in
-                            root)
-                                # Preserve relative path inside repo root
-                                if [[ "$file_path" = /* ]]; then
-                                    repo_path="$(basename "$file_path")"
-                                else
-                                    repo_path="$file_path"
-                                fi
-                                ;;
-                            common|linux|macos|windows|profile)
-                                repo_path="$target_parent/$file_path"
-                                ;;
-                            *)
-                                echo "Unknown target parent: $target_parent" >&2
-                                exit 1
-                                ;;
-                        esac
-                    else
-                        # Default repo mapping
-                        repo_path="$(_repo_path "$file_path")"
-                    fi
-
+                    local repo_path="$(_repo_path "$file_path")"
                     local full_repo_path="$HOME/.cfg/$repo_path"
                     mkdir -p "$(dirname "$full_repo_path")"
                     cp -a "$file_path" "$full_repo_path"
@@ -204,7 +186,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     fi
                 done
                 ;;
-            
+
             status)
                 # Auto-sync any modified files
                 local auto_synced=()
@@ -264,10 +246,15 @@ New-Item -Path $PROFILE -ItemType File -Force
 
 ```ps1
 # Dotfiles Management System
-if (Test-Path "$HOME/.cfg" -and Test-Path "$HOME/.cfg/refs") {
+if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
 
+    # Core git wrapper with repository as work-tree
     function _config {
-        git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" @Args
+        param(
+            [Parameter(Mandatory=$true, ValueFromRemainingArguments=$true)]
+            [String[]]$Args
+        )
+        git --git-dir="$HOME\.cfg" --work-tree="$HOME\.cfg" @Args
     }
 
     # Detect OS (cross-platform, PowerShell-native)
@@ -284,159 +271,131 @@ if (Test-Path "$HOME/.cfg" -and Test-Path "$HOME/.cfg/refs") {
 
     # Map system path to repository path
     function _repo_path {
-        param([string]$f)
+        param([string]$FilePath)
 
-        switch -Regex ($f) {
-            "^(linux/|macos/|windows/|common/|profile/|\.).*" { return $f }
+        switch -Regex ($FilePath) {
+            '^common/|^linux/|^macos/|^windows/|^profile/|README\.md' {
+                return $FilePath
+            }
+            "^$HOME\\" {
+                return $FilePath.Substring($HOME.Length + 1) # Remove $HOME\
+            }
+            default {
+                return "$CFG_OS/home/$($FilePath -replace '\\','/')"
+            }
         }
-
-        if ($f -like "$HOME*") {
-            $f = $f.Substring($HOME.Length).TrimStart("\","/")
-        }
-
-        return "$CFG_OS/home/$f"
     }
 
     # Map repository path back to system path
     function _sys_path {
-        param([string]$repo_path)
+        param([string]$RepoPath)
 
-        if ($repo_path -match ".*?/home/.*") {
-            return Join-Path $HOME ($repo_path -replace ".*?/home/", "")
-        } else {
-            if ($CFG_OS -eq "windows") {
-                return Join-Path $HOME $repo_path
-            } else {
-                return "/$repo_path"
+        switch -Regex ($RepoPath) {
+            '^common/|^linux/|^macos/|^windows/|^profile/' {
+                return Join-Path "$HOME\.cfg" $RepoPath
+            }
+            'README\.md' {
+                return "$HOME\.cfg\README.md"
+            }
+            '.*/home/.*' {
+                return Join-Path $HOME ($RepoPath -replace '^.*/home/', '')
+            }
+            default {
+                return "\" + $RepoPath
             }
         }
     }
 
-    # Main config wrapper
     function config {
         param(
-            [string]$cmd,
-            [Parameter(ValueFromRemainingArguments = $true)]
-            [string[]]$args
+            [string]$Command,
+            [Parameter(ValueFromRemainingArguments=$true)]
+            [string[]]$Args
         )
 
-        switch ($cmd) {
-
+        switch ($Command) {
             "add" {
-                $target_parent = $null
-
-                # Parse optional --to= argument
-                while ($args.Count -gt 0 -and $args[0] -like "--to=*") {
-                    $target_parent = $args[0] -replace "^--to=", ""
-                    $args = $args[1..($args.Count-1)]
-                }
-
-                foreach ($file_path in $args) {
-                    $repo_path = $null
-
-                    if ($target_parent) {
-                        switch ($target_parent) {
-                            "root" {
-                                # preserve relative path inside repo root
-                                if ([System.IO.Path]::IsPathRooted($file_path)) {
-                                    $repo_path = $file_path.TrimStart("\","/")
-                                } else {
-                                    $repo_path = $file_path
-                                }
-                            }
-                            "common"|"linux"|"macos"|"windows"|"profile" {
-                                $repo_path = Join-Path $target_parent $file_path
-                            }
-                            default {
-                                Write-Error "Unknown target parent: $target_parent"
-                                return
-                            }
-                        }
-                    } else {
-                        $repo_path = _repo_path $file_path
-                    }
-
-                    $full_repo_path = Join-Path "$HOME/.cfg" $repo_path
-                    New-Item -ItemType Directory -Force -Path (Split-Path $full_repo_path) | Out-Null
-                    Copy-Item -Path $file_path -Destination $full_repo_path -Recurse -Force
-                    _config add $repo_path
-                    Write-Output "Added: $file_path -> $repo_path"
+                foreach ($file in $Args) {
+                    $repoPath = _repo_path $file
+                    $fullRepoPath = Join-Path "$HOME\.cfg" $repoPath
+                    $dir = Split-Path $fullRepoPath
+                    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+                    Copy-Item -Path $file -Destination $fullRepoPath -Recurse -Force
+                    _config add $repoPath
+                    Write-Host "Added: $file -> $repoPath"
                 }
             }
 
             "rm" {
-                foreach ($file_path in $args) {
-                    $repo_path = _repo_path $file_path
-                    _config rm $repo_path
-                    Remove-Item -Force -Path (Join-Path "$HOME/.cfg" $repo_path)
-                    Write-Output "Removed: $file_path ($repo_path)"
+                foreach ($file in $Args) {
+                    $repoPath = _repo_path $file
+                    _config rm $repoPath
+                    Remove-Item -Path (Join-Path "$HOME\.cfg" $repoPath) -Force
+                    Write-Host "Removed: $file ($repoPath)"
                 }
             }
 
             "sync" {
-                $direction = if ($args.Count -gt 0) { $args[0] } else { "to-repo" }
-
+                $direction = if ($Args) { $Args[0] } else { "to-repo" }
                 _config ls-files | ForEach-Object {
-                    $repo_file = $_
-                    $sys_file = _sys_path $repo_file
-                    $full_repo_path = Join-Path "$HOME/.cfg" $repo_file
-
+                    $repoFile = $_
+                    $sysFile = _sys_path $repoFile
+                    $fullRepoPath = Join-Path "$HOME\.cfg" $repoFile
                     if ($direction -eq "to-repo") {
-                        if (Test-Path $sys_file -and -not (Compare-Object (Get-Content $full_repo_path -Raw) (Get-Content $sys_file -Raw))) {
-                            Copy-Item -Path $sys_file -Destination $full_repo_path -Force
-                            Write-Output "Synced to repo: $sys_file"
+                        if ((Test-Path $sysFile) -and ((Get-Content $fullRepoPath) -ne (Get-Content $sysFile))) {
+                            Copy-Item $sysFile $fullRepoPath -Force
+                            Write-Host "Synced to repo: $sysFile"
                         }
                     } elseif ($direction -eq "from-repo") {
-                        if (Test-Path $full_repo_path -and -not (Compare-Object (Get-Content $full_repo_path -Raw) (Get-Content $sys_file -Raw))) {
-                            New-Item -ItemType Directory -Force -Path (Split-Path $sys_file) | Out-Null
-                            Copy-Item -Path $full_repo_path -Destination $sys_file -Force
-                            Write-Output "Synced from repo: $sys_file"
+                        if ((Test-Path $fullRepoPath) -and ((Get-Content $fullRepoPath) -ne (Get-Content $sysFile))) {
+                            $dir = Split-Path $sysFile
+                            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+                            Copy-Item $fullRepoPath $sysFile -Force
+                            Write-Host "Synced from repo: $sysFile"
                         }
                     }
                 }
             }
 
             "status" {
-                $auto_synced = @()
+                $autoSynced = @()
                 _config ls-files | ForEach-Object {
-                    $repo_file = $_
-                    $sys_file = _sys_path $repo_file
-                    $full_repo_path = Join-Path "$HOME/.cfg" $repo_file
-
-                    if (Test-Path $sys_file -and Test-Path $full_repo_path) {
-                        if (Compare-Object (Get-Content $full_repo_path -Raw) (Get-Content $sys_file -Raw)) {
-                            Copy-Item -Path $sys_file -Destination $full_repo_path -Force
-                            $auto_synced += $repo_file
+                    $repoFile = $_
+                    $sysFile = _sys_path $repoFile
+                    $fullRepoPath = Join-Path "$HOME\.cfg" $repoFile
+                    if ((Test-Path $sysFile) -and (Test-Path $fullRepoPath)) {
+                        if ((Get-Content $fullRepoPath) -ne (Get-Content $sysFile)) {
+                            Copy-Item $sysFile $fullRepoPath -Force
+                            $autoSynced += $repoFile
                         }
                     }
                 }
-                if ($auto_synced.Count -gt 0) {
-                    Write-Output "=== Auto-synced Files ==="
-                    foreach ($repo_file in $auto_synced) {
-                        Write-Output "synced: $(_sys_path $repo_file) → $repo_file"
+                if ($autoSynced.Count -gt 0) {
+                    Write-Host "=== Auto-synced Files ==="
+                    foreach ($repoFile in $autoSynced) {
+                        Write-Host "synced: $(_sys_path $repoFile) → $repoFile"
                     }
-                    Write-Output ""
+                    Write-Host
                 }
                 _config status
-                Write-Output ""
             }
 
             "deploy" {
                 _config ls-files | ForEach-Object {
-                    $repo_file = $_
-                    $sys_file = _sys_path $repo_file
-                    $full_repo_path = Join-Path "$HOME/.cfg" $repo_file
-
-                    if (Test-Path $full_repo_path) {
-                        New-Item -ItemType Directory -Force -Path (Split-Path $sys_file) | Out-Null
-                        Copy-Item -Path $full_repo_path -Destination $sys_file -Recurse -Force
-                        Write-Output "Deployed: $repo_file -> $sys_file"
+                    $repoFile = $_
+                    $sysFile = _sys_path $repoFile
+                    $fullRepoPath = Join-Path "$HOME\.cfg" $repoFile
+                    if (Test-Path $fullRepoPath) {
+                        $dir = Split-Path $sysFile
+                        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+                        Copy-Item $fullRepoPath $sysFile -Recurse -Force
+                        Write-Host "Deployed: $repoFile -> $sysFile"
                     }
                 }
             }
 
             default {
-                _config $cmd @args
+                _config $Command @Args
             }
         }
     }
