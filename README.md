@@ -17,6 +17,19 @@ Welcome, and make yourself at <b><i>$HOME</i></b>
 
 > Agnostic/cross-platform dotfiles (Linux/MacOS/Windows)
 
+
+- This repository is designed to be a bare Git dotfiles repository located in your home directory. 
+- Easy dotfiles management that respects the file hierarchy/XDG structure cross platform.
+- Custom `config` command that intelligently manages files across different operating systems.
+
+Example:
+```bash
+config add .bashrc # → linux/home/.bashrc
+config add /etc/issue # → linux/etc/issue
+config commit -m "Updated Dotfiles Management"
+config push -u origin main
+```
+
 ---
 
 ## Details
@@ -37,26 +50,12 @@ Linux:
 
 ---
 
-- This repository is designed to be a bare Git dotfiles repository located in your home directory. 
-- Easy dotfiles management that respects the file hierarchy/XDG structure cross platform.
-- Custom `config` command that intelligently manages files across different operating systems.
-
-Example:
-```bash
-config add .bashrc # → linux/home/.bashrc
-config add /etc/issue # → linux/etc/issue
-config commit -m "Updated Dotfiles Management"
-config push -u origin main
-```
-
----
-
 ### Installing onto a new system (Manual)
 
 1. Avoid weird behaviour/recursion issues when `.cfg` tries to track itself
 
 ```bash
-$ echo ".cfg" >> .gitignore
+echo ".cfg" >> .gitignore
 ```
 
 2. Clone the repository
@@ -74,8 +73,8 @@ git clone --bare https://github.com/srdusr/dotfiles.git $env:USERPROFILE/.cfg
 
 3. Setup the `config` command/function
 
-Linux/MacOS:
-Copy and paste this into any profile/startup file ie. `~/.bashrc`, `~/.zshrc` etc.
+##### Linux/MacOS
+Copy and paste the following snippet to any profile/startup file ie. `~/.bashrc`, `~/.zshrc` etc.
 
 <details>
   <summary><b>Bash/Zsh:</b> </summary>
@@ -233,7 +232,9 @@ fi
 
   </details>
 
-Windows: 
+---
+
+##### Windows
 Paste the PowerShell code block directly into your PowerShell profile. 
 To find your profile path, simply run `$PROFILE` in your terminal. You can open and edit it with `notepad $PROFILE`.
 If the file doesn't exist, you can create it
@@ -403,6 +404,8 @@ if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
 ```
 
   </details>
+
+---
 
 4. Make sure to not show untracked files
 
