@@ -135,7 +135,7 @@ mark_step_failed() {
 
 show_help() {
     cat << EOF
-Enhanced Dotfiles Installation Script
+Dotfiles Installation Script
 
 USAGE:
     $0 [OPTIONS]
@@ -457,7 +457,7 @@ setup_logging() {
     # Initialize log file
     {
         echo "======================================="
-        echo "Enhanced Dotfiles Installation Log"
+        echo "Dotfiles Installation Log"
         echo "Date: $(date)"
         echo "User: $USER"
         echo "Host: $HOSTNAME"
@@ -475,7 +475,7 @@ setup_logging() {
     print_info "Log file initialized: $LOG_FILE" "always"
 }
 
-# Enhanced log function
+# log function
 log_message() {
     local level="$1"
     local message="$2"
@@ -496,7 +496,7 @@ log_message() {
 # User Interaction Functions (enhanced)
 #======================================
 
-# Enhanced prompt function
+# prompt function
 prompt_user() {
     local question="$1"
     local default="${2:-Y}"
@@ -638,7 +638,7 @@ detect_linux_distro() {
 }
 
 #======================================
-# Enhanced Utility Functions
+# Utility Functions
 #======================================
 
 # Check if command exists
@@ -1021,82 +1021,71 @@ git_without_work_tree() {
     fi
 }
 
-# Dotfiles Management System (keeping existing config function)
+# Dotfiles Management System
 if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
+
     # Core git wrapper with repository as work-tree
     _config() {
-        git --git-dir="$DOTFILES_DIR" --work-tree="$HOME" "$@"
+        git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
     }
+
+    # Detect OS
+    case "$(uname -s)" in
+        Linux)   CFG_OS="linux" ;;
+        Darwin)  CFG_OS="macos" ;;
+        MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
+        *)       CFG_OS="other" ;;
+    esac
 
     # Map system path to repository path
     _repo_path() {
         local f="$1"
-        local relative_path="${f#$HOME/}"
-        local repo_path
 
         # If it's an absolute path that's not in HOME, handle it specially
         if [[ "$f" == /* && "$f" != "$HOME/"* ]]; then
-            echo "$CFG_OS/root/$f"
+            echo "$CFG_OS/${f#/}"
             return
         fi
 
-        # Check for paths that are explicitly within the repo structure
+        # Check for paths that should go to the repository root
         case "$f" in
-            "$HOME/.cfg/"*)
-                echo ""
-                return
-                ;;
-            "common/"*)
+            common/*|linux/*|macos/*|windows/*|profile/*|README.md)
+                # If path already looks like a repo path, use it as is
                 echo "$f"
                 return
                 ;;
-            "$CFG_OS/"*)
-                echo "$f"
-                return
-                ;;
-            *)
-                echo "$CFG_OS/home/$relative_path"
-                return
+            # Otherwise, convert to a relative path
+            "$HOME/"*)
+                f="${f#$HOME/}"
                 ;;
         esac
+
+        # Default: put under OS-specific home
+        echo "$CFG_OS/home/$f"
     }
 
     # Map repository path back to system path
     _sys_path() {
         local repo_path="$1"
-        local file_path
+        local os_path_pattern="$CFG_OS/"
+
+        # Handle OS-specific files that are not in the home subdirectory
+        if [[ "$repo_path" == "$os_path_pattern"* && "$repo_path" != */home/* ]]; then
+            echo "/${repo_path#$os_path_pattern}"
+            return
+        fi
 
         case "$repo_path" in
-            common/config/*)
-                file_path="${repo_path#common/config/}"
-                if [[ "$CFG_OS" == "windows" ]]; then
-                    echo "$HOME/AppData/Local/$file_path"
-                else
-                    echo "$HOME/.config/$file_path"
-                fi
-                ;;
-            common/bin/*)
-                file_path="${repo_path#common/bin/}"
-                if [[ "$CFG_OS" == "windows" ]]; then
-                    echo "$HOME/bin/$file_path"
-                else
-                    echo "$HOME/.local/bin/$file_path"
-                fi
-                ;;
-            common/*)
-                file_path="${repo_path#common/}"
-                echo "$HOME/$file_path"
-                ;;
+            # Files in the home directory
             */home/*)
-                file_path="${repo_path#*/home/}"
-                echo "$HOME/$file_path"
+                echo "$HOME/${repo_path#*/home/}"
                 ;;
-            */root/*)
-                file_path="${repo_path#*/root/}"
-                echo "/$file_path"
+            # Other files in the repo root
+            common/*|profile/*|README.md|linux/*|macos/*|windows/*)
+                echo "$HOME/.cfg/$repo_path"
                 ;;
             *)
-                echo "$HOME/$repo_path"
+                echo "/$repo_path"
                 ;;
         esac
     }
@@ -1119,7 +1108,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         fi
     }
 
-    # Enhanced config command
+    # NOTE: can change `config` to whatever you feel comfortable ie. dotfiles, dots, cfg etc.
     config() {
         local cmd="$1"; shift
         case "$cmd" in
@@ -1127,10 +1116,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 local file_path
                 for file_path in "$@"; do
                     local repo_path="$(_repo_path "$file_path")"
-                    if [[ -z "$repo_path" ]]; then
-                         echo "Warning: Ignoring file within the bare repo: $file_path"
-                         continue
-                    fi
                     local full_repo_path="$HOME/.cfg/$repo_path"
                     mkdir -p "$(dirname "$full_repo_path")"
                     cp -a "$file_path" "$full_repo_path"
@@ -1173,14 +1158,15 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ "$direction" == "to-repo" ]]; then
-                        if [[ -e "$sys_file" && -n "$(diff "$full_repo_path" "$sys_file" 2>/dev/null || true)" ]]; then
+                        if [[ -e "$sys_file" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
                             cp -a "$sys_file" "$full_repo_path"
                             echo "Synced to repo: $sys_file"
                         fi
                     elif [[ "$direction" == "from-repo" ]]; then
-                        if [[ -e "$full_repo_path" && -n "$(diff "$full_repo_path" "$sys_file" 2>/dev/null || true)" ]]; then
+                        if [[ -e "$full_repo_path" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
                             local dest_dir="$(dirname "$sys_file")"
-                            if [[ "$sys_file" == "/etc"* || "$sys_file" == "/usr"* ]]; then
+                            if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
+                                _sudo_prompt mkdir -p "$dest_dir"
                                 _sudo_prompt cp -a "$full_repo_path" "$sys_file"
                             else
                                 mkdir -p "$dest_dir"
@@ -1192,6 +1178,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 done
                 ;;
             status)
+                # Auto-sync any modified files
                 local auto_synced=()
                 while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
@@ -1206,7 +1193,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 if [[ ${#auto_synced[@]} -gt 0 ]]; then
                     echo "=== Auto-synced Files ==="
                     for repo_file in "${auto_synced[@]}"; do
-                        echo "synced: $(_sys_path "$repo_file") → $repo_file"
+                        echo "synced: $(_sys_path "$repo_file") -> $repo_file"
                     done
                     echo
                 fi
@@ -1220,7 +1207,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     if [[ -e "$full_repo_path" ]]; then
                         if [[ -n "$sys_file" ]]; then
                             local dest_dir="$(dirname "$sys_file")"
-                            if [[ "$sys_file" == "/etc"* || "$sys_file" == "/usr"* ]]; then
+                            if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
                                 _sudo_prompt mkdir -p "$dest_dir"
                                 _sudo_prompt cp -a "$full_repo_path" "$sys_file"
                             else
@@ -1255,7 +1242,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
 fi
 
 #======================================
-# Enhanced Installation Functions
+# Installation Functions
 #======================================
 
 # Install dotfiles
@@ -1368,7 +1355,7 @@ setup_user_dirs() {
     mark_step_completed "setup_user_dirs"
 }
 
-# Enhanced yq installation
+# yq installation
 install_yq() {
     local bin_dir="$HOME/.local/bin"
     local yq_path="$bin_dir/yq"
@@ -1414,7 +1401,7 @@ install_yq() {
     print_success "yq installed successfully"
 }
 
-# Enhanced package installation
+# package installation
 install_packages() {
     print_section "Installing Packages"
     save_state "install_packages" "started"
@@ -1465,7 +1452,7 @@ install_packages() {
     mark_step_completed "install_packages"
 }
 
-# Enhanced Linux package installation
+# Linux package installation
 install_linux_packages() {
     local packages_file="$1"
     local failed_packages=()
@@ -1587,7 +1574,7 @@ install_linux_packages() {
     return 0
 }
 
-# Enhanced shell setup
+# shell setup
 setup_shell() {
     print_section "Setting Up Shell Environment"
     save_state "setup_shell" "started"
@@ -1629,7 +1616,7 @@ setup_shell() {
     mark_step_completed "setup_shell"
 }
 
-# Enhanced Zsh plugin installation
+# Zsh plugin installation
 install_zsh_plugins() {
     local plugins_dir="$HOME/.config/zsh/plugins"
     local plugins=(
@@ -1901,7 +1888,7 @@ apply_tweaks() {
 }
 
 #======================================
-# Enhanced Summary and Cleanup
+# Summary and Cleanup
 #======================================
 
 # Print installation summary
@@ -1968,7 +1955,7 @@ print_installation_summary() {
 }
 
 #======================================
-# Enhanced Main Installation Flow
+# Main Installation Flow
 #======================================
 
 # Execute installation step with error handling
@@ -2005,7 +1992,7 @@ main() {
     # Initialize
     setup_logging "$@"
 
-    print_header "Enhanced Dotfiles Installation"
+    print_header "Dotfiles Installation"
 
     if [[ "$DRY_RUN" == true ]]; then
         print_warning "DRY RUN MODE - No changes will be made"
@@ -2143,7 +2130,7 @@ main() {
         fi
 
         echo
-        print_color "$GREEN$BOLD" "Thank you for using the Enhanced Dotfiles Installation Script!"
+        print_color "$GREEN$BOLD" "Thank you for using the Dotfiles Installation Script!"
     fi
 
     # Exit with appropriate code

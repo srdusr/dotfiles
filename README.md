@@ -85,96 +85,66 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
 
     # Core git wrapper with repository as work-tree
     _config() {
-        git --git-dir="$HOME/.cfg" --work-tree="$HOME" "$@"
+        git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
     }
 
     # Detect OS
     case "$(uname -s)" in
-        Linux)    CFG_OS="linux" ;;
+        Linux)   CFG_OS="linux" ;;
         Darwin)  CFG_OS="macos" ;;
         MINGW*|MSYS*|CYGWIN*) CFG_OS="windows" ;;
-        *)        CFG_OS="other" ;;
+        *)       CFG_OS="other" ;;
     esac
 
     # Map system path to repository path
     _repo_path() {
         local f="$1"
-        local relative_path="${f#$HOME/}"
-        local repo_path
 
         # If it's an absolute path that's not in HOME, handle it specially
         if [[ "$f" == /* && "$f" != "$HOME/"* ]]; then
-            echo "$CFG_OS/root/$f"
+            echo "$CFG_OS/${f#/}"
             return
         fi
 
-        # Check for paths that are explicitly within the repo structure
+        # Check for paths that should go to the repository root
         case "$f" in
-            "$HOME/.cfg/"*)
-                # We do not want to track files within the bare repo itself
-                echo ""
-                return
-                ;;
-            "common/"*)
-                # Common files remain in the common directory
+            common/*|linux/*|macos/*|windows/*|profile/*|README.md)
+                # If path already looks like a repo path, use it as is
                 echo "$f"
                 return
                 ;;
-            "$CFG_OS/"*)
-                # OS-specific files remain in their respective OS directories
-                echo "$f"
-                return
-                ;;
-            *)
-                # Default: place under OS-specific home
-                echo "$CFG_OS/home/$relative_path"
-                return
+            # Otherwise, convert to a relative path
+            "$HOME/"*)
+                f="${f#$HOME/}"
                 ;;
         esac
+
+        # Default: put under OS-specific home
+        echo "$CFG_OS/home/$f"
     }
 
     # Map repository path back to system path
     _sys_path() {
         local repo_path="$1"
-        local file_path
+        local os_path_pattern="$CFG_OS/"
+
+        # Handle OS-specific files that are not in the home subdirectory
+        if [[ "$repo_path" == "$os_path_pattern"* && "$repo_path" != */home/* ]]; then
+            echo "/${repo_path#$os_path_pattern}"
+            return
+        fi
 
         case "$repo_path" in
-            common/config/*)
-                # Maps common config files to the appropriate configuration directory
-                file_path="${repo_path#common/config/}"
-                if [[ "$CFG_OS" == "windows" ]]; then
-                    echo "$HOME/AppData/Local/$file_path"
-                else
-                    echo "$HOME/.config/$file_path"
-                fi
-                ;;
-            common/bin/*)
-                # Maps common bin files to the appropriate user local bin directory
-                file_path="${repo_path#common/bin/}"
-                if [[ "$CFG_OS" == "windows" ]]; then
-                    echo "$HOME/bin/$file_path"
-                else
-                    echo "$HOME/.local/bin/$file_path"
-                fi
-                ;;
-            common/*)
-                # Maps remaining common files to the home directory
-                file_path="${repo_path#common/}"
-                echo "$HOME/$file_path"
-                ;;
+            # Files in the home directory
             */home/*)
-                # Maps OS-specific home files to $HOME
-                file_path="${repo_path#*/home/}"
-                echo "$HOME/$file_path"
+                echo "$HOME/${repo_path#*/home/}"
                 ;;
-            */root/*)
-                # Maps root files to the absolute root directory
-                file_path="${repo_path#*/root/}"
-                echo "/$file_path"
+            # Other files in the repo root
+            common/*|profile/*|README.md|linux/*|macos/*|windows/*)
+                echo "$HOME/.cfg/$repo_path"
                 ;;
             *)
-                # Fallback for other paths
-                echo "$HOME/$repo_path"
+                echo "/$repo_path"
                 ;;
         esac
     }
@@ -205,10 +175,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 local file_path
                 for file_path in "$@"; do
                     local repo_path="$(_repo_path "$file_path")"
-                    if [[ -z "$repo_path" ]]; then
-                         echo "Warning: Ignoring file within the bare repo: $file_path"
-                         continue
-                    fi
                     local full_repo_path="$HOME/.cfg/$repo_path"
                     mkdir -p "$(dirname "$full_repo_path")"
                     cp -a "$file_path" "$full_repo_path"
@@ -217,12 +183,32 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 done
                 ;;
             rm)
-                local file_path
-                for file_path in "$@"; do
+                local rm_opts=""
+                local file_path_list=()
+
+                # Separate options from file paths
+                for arg in "$@"; do
+                    if [[ "$arg" == "-"* ]]; then
+                        rm_opts+=" $arg"
+                    else
+                        file_path_list+=("$arg")
+                    fi
+                done
+
+                for file_path in "${file_path_list[@]}"; do
                     local repo_path="$(_repo_path "$file_path")"
-                    _config rm "$repo_path"
-                    rm -f "$HOME/.cfg/$repo_path"
-                    echo "Removed: $file_path ($repo_path)"
+
+                    # Use a dummy run of `git rm` to handle the recursive flag
+                    if [[ "$rm_opts" == *"-r"* ]]; then
+                        _config rm --cached -r "$repo_path"
+                    else
+                        _config rm --cached "$repo_path"
+                    fi
+
+                    # Remove from the filesystem, passing the collected options
+                    eval "rm $rm_opts \"$file_path\""
+
+                    echo "Removed: $file_path"
                 done
                 ;;
             sync)
@@ -238,7 +224,8 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     elif [[ "$direction" == "from-repo" ]]; then
                         if [[ -e "$full_repo_path" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
                             local dest_dir="$(dirname "$sys_file")"
-                            if [[ "$sys_file" == "/etc"* || "$sys_file" == "/usr"* ]]; then
+                            if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
+                                _sudo_prompt mkdir -p "$dest_dir"
                                 _sudo_prompt cp -a "$full_repo_path" "$sys_file"
                             else
                                 mkdir -p "$dest_dir"
@@ -250,6 +237,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 done
                 ;;
             status)
+                # Auto-sync any modified files
                 local auto_synced=()
                 while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
@@ -264,7 +252,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 if [[ ${#auto_synced[@]} -gt 0 ]]; then
                     echo "=== Auto-synced Files ==="
                     for repo_file in "${auto_synced[@]}"; do
-                        echo "synced: $(_sys_path "$repo_file") → $repo_file"
+                        echo "synced: $(_sys_path "$repo_file") -> $repo_file"
                     done
                     echo
                 fi
@@ -278,7 +266,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     if [[ -e "$full_repo_path" ]]; then
                         if [[ -n "$sys_file" ]]; then
                             local dest_dir="$(dirname "$sys_file")"
-                            if [[ "$sys_file" == "/etc"* || "$sys_file" == "/usr"* ]]; then
+                            if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
                                 _sudo_prompt mkdir -p "$dest_dir"
                                 _sudo_prompt cp -a "$full_repo_path" "$sys_file"
                             else
@@ -294,7 +282,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 local timestamp=$(date +%Y%m%d%H%M%S)
                 local backup_dir="$HOME/.dotfiles_backup/$timestamp"
                 echo "Backing up existing dotfiles to $backup_dir..."
-                
+
                 _config ls-files | while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     if [[ -e "$sys_file" ]]; then
