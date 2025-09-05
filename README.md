@@ -26,7 +26,7 @@ Example:
 ```bash
 config add .bashrc # → linux/home/.bashrc
 config add /etc/issue # → linux/etc/issue
-config commit -m "Updated Dotfiles Management"
+config commit -m "Updated dotfiles"
 config push -u origin main
 ```
 
@@ -70,6 +70,7 @@ git clone --bare https://github.com/srdusr/dotfiles.git $HOME/.cfg
 git clone --bare https://github.com/srdusr/dotfiles.git $env:USERPROFILE/.cfg
 ```
 
+<a name="config-example"></a>
 
 3. Setup the `config` command/function
 
@@ -610,7 +611,120 @@ irm 'https://raw.githubusercontent.com/srdusr/dotfiles/main/windows/Documents/Po
 ---
 
 <details>
-  <summary><b>Notes</b> (If you have some time to read)</summary>
+  <summary><b>Setup/guide</b> (If you have time to read)</summary>
+
+### Dotfiles Setup
+
+
+1. Initialize a Bare Repository
+
+First, set up a bare Git repository in your home directory. A bare repository contains only the internal Git metadata (like commit history and branches) without a checked-out copy of your files. This is perfect for dotfiles because it lets Git manage files directly in your home directory without cluttering it with a visible .git folder.
+
+```bash
+# Bash/Zsh:
+cd ~
+git init --bare $HOME/.cfg 
+```
+
+```ps1
+# PowerShell:
+Set-Location $HOME 
+git init --bare "$HOME\.cfg"
+```
+
+2. Create the Directory Structure
+
+To keep your dotfiles organized and easily managed across platforms, create subdirectories for common and OS-specific files. This structure allows the `config` command to automatically place files in the correct location.
+
+```bash
+# Bash/Zsh:
+mkdir -p $HOME/.cfg/{common,linux,macos,profile,windows}
+```
+
+```ps1
+# PowerShell:
+New-Item -ItemType Directory -Force -Path "$HOME\.cfg\common","$HOME\.cfg\linux","$HOME\.cfg\macos","$HOME\.cfg\profile","$HOME\.cfg\windows"
+```
+
+3. Create `config` command by pasting this into relevant profile file ie, `.bashrc`, `.zshrc`, `profile.ps1` and restarting the terminal
+[config command:](#config-example)
+
+4. Hide untracked files
+
+```bash
+config config --local status.showUntrackedFiles no
+  ```
+
+5. Add Files to Your Repository
+
+Now you can use the `config` command to add your dotfiles. The `config add` command copies the file from your system into the correct folder within your bare repository and stages it for a Git commit.
+
+To add a file specific to your operating system:
+
+```bash
+# Bash/Zsh:
+config add .bashrc # This is added to $HOME/.cfg/linux/home/.bashrc
+```
+
+```bash
+# PowerShell:
+config add $PROFILE
+```
+
+The `config` command intelligently determines the correct subdirectory based on OS and the file's location.
+
+To add a file from the repository's root, like a README.md:
+
+```bash
+# Bash/Zsh:
+config add $HOME/.cfg/README.md # This is added to the root of your repo
+```
+
+```bash
+# PowerShell:
+config add "$HOME\.cfg\README.md"
+```
+
+This works because `config` is configured to recognize and handle files explicitly within the .cfg directory.
+Can also specify/edit/add other other OS/common or outside of home directory by providing a path relative in .cfg/
+
+To add a common file:
+
+```bash
+config add $HOME/.cfg/common/.aliases # Added to $HOME/.cfg/common/.aliases
+```
+
+To add a file from outside the home directory:
+
+```bash
+# Bash/Zsh:
+config add /etc/fstab # Added to $HOME/.cfg/linux/etc/fstab
+```
+
+```bash
+# PowerShell:
+Start-Process powershell -Verb RunAs -ArgumentList "config add C:\Windows\System32\drivers\etc\hosts"
+```
+
+NOTE: The `config` command is also capable of handling system-level configuration files that require administrator privileges. Will ask for your password/need admin privileges
+
+
+6. Commit and Push
+
+Once your files are added, you can commit them and push them to a remote repository (like GitHub or GitLab) for safekeeping and easy synchronization across your machines.
+
+```bash
+# Commit the changes
+config commit -m "Initial commit of dotfiles"
+
+# Add a remote origin (replace with your repository's URL)
+config remote add origin https://github.com/<username>/dotfiles.git
+
+# Push your changes
+config push -u origin main
+```
+
+---
 
 ### Fzf
 
