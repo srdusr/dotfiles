@@ -1,296 +1,700 @@
-"===============================================================================
-"                          Mappings/Keybindings/Commands
-"===============================================================================
+" ============================================================================
+" Vim Configuration
+" Maintainer: srdusr
+" ============================================================================
 
-let mapleader = ";" " map leader to Semi colon
+" ============================================================================
+" Core Settings
+" ============================================================================
+set nocompatible
+set encoding=utf-8
+set fileencoding=utf-8
+scriptencoding utf-8
+set termguicolors
+set mouse=a
+set clipboard=unnamedplus
+set hidden
+set updatetime=300
+set timeoutlen=500
+set ttimeoutlen=10
 
-inoremap jk <Esc> " Use <jk> to escape
-
-" Easier split navigations, just ctrl-j instead of ctrl-w then j
-nnoremap <C-J> <C-W><C-J>
-nnoremap <C-K> <C-W><C-K>
-nnoremap <C-L> <C-W><C-L>
-nnoremap <C-H> <C-W><C-H>
-
-" Recent files (MRU)
-nnoremap <leader>m :browse old<cr>
-" Search files by name
-"nnoremap <leader>p :find **/**<left>
-" browse files from same dir as current file
-nnoremap <leader>e :e %:p:h<CR>
-
-" Combine buffers list with buffer name
-"nnoremap <Leader>b :buffers<CR>:buffer<Space>
-
-" Jump to a buffer
-nnoremap <leader>b :ls t<cr>:b
-
-" Map buffer next, prev and delete to <leader+(n/p/d)>
-map <leader>n :bn<cr>
-map <leader>p :bp<cr>
-map <leader>d :bd<cr>
-
-" tab navigation
-noremap <C-t>h :tabprevious<CR>
-noremap <C-t>l :tabnext<CR>
-noremap <C-t>k :tabfirst<CR>
-noremap <C-t>j :tablast<CR>
-noremap <C-t>n :tabnew<CR>
-noremap <C-t>e :tabedit<Space>
-noremap <C-t>c :tabclose<CR>
-noremap <C-t>m :tabm<Space>
-
-" Swap two pieces of text, use x to cut in visual mode, then use Ctrl-x in
-" visual mode to select text to swap with
-:vnoremap <C-X> <Esc>`.``gvP``P
-
-" To resize in different steps, you can create maps that will adjust the window
-" size differently. For example to increase the window size by a factor of 1.5
-" and decrease the window size by 0.67, you can map this:
-"nnoremap <silent> <Leader>+ :exe "resize " . (winheight(0) * 3/2)<CR>
-"nnoremap <silent> <Leader>- :exe "resize " . (winheight(0) * 2/3)<CR>
-nnoremap <Leader>+ :resize +5<CR>
-nnoremap <Leader>- :resize -5<CR>
-nnoremap <Leader>> :vertical resize +5<CR>
-nnoremap <Leader>< :vertical resize -5<CR>
-
-" Toggle set number
-"nnoremap <leader>$ :NumbersToggle<CR>
-"nnoremap <leader>% :NumbersOnOff<CR>
-
-" Copy and Paste with <C-c> and <C-v>
-"vmap <C-c> y:call system("xclip -i -selection clipboard", getreg("\""))<CR>:call system("xclip -i", getreg("\""))<CR>
-"nmap <C-v> :call setreg("\"",system("xclip -o -selection clipboard"))<CR>p
-nnoremap <expr> p (v:register == '"' && &clipboard =~ 'unnamed' ? '"*p' : '"' . v:register . 'p')
-
-" Use command :Vb for Visual Block or <C-q> since <C-v> is used for Copy
-command! Vb normal! <C-v>
-
-" Map <w!!> to save/edit a root permission/read-only file, only works in
-" traditional vim and not neovim
-cmap w!! %!sudo tee > /dev/null
-
-nnoremap <leader>x :silent !chmod +x %<CR>
-
-"nnoremap <[-p> m`o<ESC>p``
-" Paste on next line
-"nnoremap <]-p> m`O<ESC>p``
-
-"inoremap <C-CR> <C-R>"
-"set keywordprg=:help
-"runtime ftplugin/man.vim
-
-
-"===============================================================================
-"                                    Settings
-"===============================================================================
-
-" Neovim requires xclip, check if normal vim has +clipboard by
-" <:echo has('clipboard')> from within Vim (if the output is 1, good to
-" go otherwise 0 then need a build that has it
-" Next two commands make vim use X11 clipboard
-set clipboard+=unnamedplus
-let g:clipbrdDefaultReg = '+'
-
-"let g:loaded_clipboard_provider = 1
-" <:e %:h/filename> will create a new file named filename in the same
-" directory as the currently open file, and write it.
-set autochdir " or use this to use <:e> to create a file in current directory
-set splitright " make vsplit put the new buffer on the right of the current buffer
-set splitbelow " make split put the new buffer below the current buffer
-" :Bclose script (delete a buffer without closing the window) sourced as a
-" plugin in ~/.config/nvim/plugin/bclose.vim | keymap: <leader>bd
-"let bclose_multiple = 1
-"set syntax
-" Compute syntax highlighting from beginning of file. (By default, vim only
-" looks 200 lines back, which can make it highlight code incorrectly in some
-" long files.)
-autocmd BufEnter * :syntax sync fromstart
-" Don't syntax highlight markdown because it's often wrong
-autocmd! FileType mkd setlocal syn=off
+" Performance
 set ttyfast
 set lazyredraw
-" Set lazyredraw to false
-"let &lazyredraw = 0
-set timeout timeoutlen=1000 ttimeoutlen=100 " fix slow O inserts
-set scrolloff=8 sidescrolloff=8
-set tabstop=4 softtabstop=4 shiftwidth=4 expandtab
+set ttyscroll=3
+
+" ============================================================================
+" Display and UI Settings
+" ============================================================================
+set number
+set relativenumber
+set cursorline
+set signcolumn=no
+set showcmd
+set showmode
+set showmatch
+set matchtime=2
+set laststatus=2
+set cmdheight=1
+set scrolloff=8
+set sidescrolloff=8
+set sidescroll=1
+set display=lastline
+set nowrap
+set linebreak
+set showbreak=↪\
+
+" Window behavior
+set splitright
+set splitbelow
+set winminwidth=1
+set winwidth=5
+
+" ============================================================================
+" Formatting and Indentation Settings
+" ============================================================================
 set autoindent
 set smartindent
-" Also load indent files, to automatically do language-dependent indenting.
-filetype plugin indent on
-set exrc
-set relativenumber
-set hidden
-set noerrorbells
-set nowrap
+set expandtab
+set tabstop=2
+set shiftwidth=2
+set softtabstop=2
+set shiftround
+set textwidth=80
+set formatoptions+=j
+" set colorcolumn=+1
+
+" File-specific formatting
+setlocal tabstop=4
+setlocal shiftwidth=4
+setlocal softtabstop=4
+setlocal foldmethod=marker
+
+" ============================================================================
+" Search and Matching Settings
+" ============================================================================
+set hlsearch
+set incsearch
 set ignorecase
 set smartcase
-set noswapfile
-set nobackup
-set incsearch
-"set cursorline
 set showmatch
-set showcmd
-set incsearch
-set hlsearch
-set laststatus=2
-let g:python3_host_prog = '/usr/bin/python3'
-"let g:loaded_python3_provider = 1
-let g:sh_noisk=1
-set modeline
-set modelines=3 " modelines (comments that set vim options on a per-file basis)
-set foldmethod=manual
-set nofoldenable " turn folding off
-" Insert only one space when joining lines that contain sentence-terminating
-" punctuation like `.`.
-set nojoinspaces
-set autoread " if a file is changed outside of vim, automatically reload it without asking
-set diffopt=vertical " diffs are shown side-by-side not above/below
-set signcolumn=no " always show the sign column
-set textwidth=80
-set mouse=a
+" set inccommand=split
 
-" FILE BROWSING:
-let g:netrw_banner=0        " disable annoying banner
-let g:netrw_browse_split=4  " open in prior window
-let g:netrw_altv=1          " open splits to the right
-let g:netrw_liststyle=3     " tree view
+" ============================================================================
+" File Handling and Backup Settings
+" ============================================================================
+set autoread
+set autowrite
+set autochdir
+set confirm
+set fileformats=unix,dos,mac
+
+" Backup and undo configuration
+set backup
+set writebackup
+set backupcopy=yes
+set undofile
+set noswapfile
+set backupdir=~/.cache/vim/backup//
+set directory=~/.cache/vim/swap//
+set undodir=~/.cache/vim/undo//
+set undolevels=10000
+set undoreload=10000
+
+" Create necessary directories
+let s:config_dir = expand('~/.vim')
+let s:cache_dir = expand('~/.cache/vim')
+let s:dirs = [
+            \ s:cache_dir . '/backup',
+            \ s:cache_dir . '/swap',
+            \ s:cache_dir . '/undo',
+            \ s:cache_dir . '/shada',
+            \ s:config_dir . '/sessions',
+            \ ]
+
+for s:dir in s:dirs
+    if !isdirectory(s:dir)
+        call mkdir(s:dir, 'p', 0700)
+    endif
+endfor
+
+" ============================================================================
+" Completion and Command Line Settings
+" ============================================================================
+set omnifunc=syntaxcomplete#Complete
+set complete=.,w,b,u,t,i,kspell
+set completeopt=menu,menuone,noselect
+
+" Wildmenu configuration
+set wildmenu
+set wildmode=longest:full,full
+set wildignorecase
+set wildignore+=*.o,*.obj,.git,*.rbc,*.pyc,__pycache__
+set wildignore+=.git,.hg,.svn
+set wildignore+=*.swp,*.swo
+set wildignore+=*.DS_Store
+set wildignore+=*.class
+
+" ============================================================================
+" Leader Keys
+" ============================================================================
+let mapleader = ";"
+let maplocalleader = "\\"
+
+" ============================================================================
+" Navigation and Movement Mappings
+" ============================================================================
+
+" Tmux/Vim Navigation Function
+function! SmartMove(direction, tmux_flag)
+    let curwin = win_getid()
+    execute 'wincmd ' . a:direction
+    if win_getid() == curwin
+        call system('tmux select-pane ' . a:tmux_flag)
+    endif
+endfunction
+
+" Window navigation
+nnoremap <silent> <C-h> :call SmartMove('h', '-L')<CR>
+nnoremap <silent> <C-j> :call SmartMove('j', '-D')<CR>
+nnoremap <silent> <C-k> :call SmartMove('k', '-U')<CR>
+nnoremap <silent> <C-l> :call SmartMove('l', '-R')<CR>
+
+" Split window horizontally
+nnoremap <leader>- :split<CR>
+
+" Split window vertically
+nnoremap <leader>\ :vsplit<CR>
+
+" Close the current window
+nnoremap <leader>c <C-w>c
+
+" Buffer navigation
+nnoremap <silent> <leader>bn :bnext<CR>
+nnoremap <silent> <leader>bp :bprevious<CR>
+nnoremap <silent> <leader>bd :bdelete<CR>
+nnoremap <silent> <leader>ba :%bdelete<CR>
+nnoremap <silent> <leader>bl :ls<CR>:b<Space>
+
+" Quickfix and location list
+nnoremap ]q :cnext<CR>zz
+nnoremap [q :cprev<CR>zz
+nnoremap ]l :lnext<CR>zz
+nnoremap [l :lprev<CR>zz
+
+" ============================================================================
+" File and Buffer Management Mappings
+" ============================================================================
+nnoremap <silent> <leader>w :w<CR>
+nnoremap <silent> <leader>q :q<CR>
+nnoremap <silent> <leader>wq :wq<CR>
+nnoremap <silent> <leader>Q :qa!<CR>
+
+" File operations
+nnoremap <leader>f :Lex<CR>
+noremap <leader>o :Explore<CR>
+nnoremap <leader>rf :browse old<cr>
+
+" Utility mappings
+nnoremap <silent> <leader>r :registers<CR>
+nnoremap <silent> <leader>m :redir @+<CR>:silent messages<CR>:redir END<CR>
+nnoremap <silent> <leader>hx :call HexState()<CR>
+nnoremap <buffer> <leader>h :help <C-R><C-W><CR>
+
+" Format disable
+cnoremap F! :noautocmd w<CR>
+
+" ============================================================================
+" Window and Terminal Mappings
+" ============================================================================
+
+" Window resizing
+nnoremap <M-Up>    :resize -2<CR>
+noremap <M-Down>  :resize +2<CR>
+noremap <M-Left>  :vertical resize -2<CR>
+noremap <M-Right> :vertical resize +2<CR>
+
+" Terminal mode
+nnoremap <silent> <C-t> :terminal<CR>
+tnoremap <C-t> <C-\><C-n>:q!<CR>
+tnoremap <Esc> <C-\><C-n>
+tnoremap <C-h> <C-\><C-n><C-w>h
+tnoremap <C-j> <C-\><C-n><C-w>j
+tnoremap <C-k> <C-\><C-n><C-w>k
+tnoremap <C-l> <C-\><C-n><C-w>l
+
+" ============================================================================
+" Text Editing and Visual Mode Mappings
+" ============================================================================
+
+" Insert mode shortcuts
+inoremap jk <ESC>
+
+" Visual mode operations
+vnoremap J :m '>+1<CR>gv=gv
+vnoremap K :m '>-2<CR>gv=gv
+vnoremap < <gv
+vnoremap > >gv
+
+" Text formatting
+nnoremap Q gqap
+
+" Auto-closing pairs
+inoremap [ []<left>
+inoremap ( ()<left>
+inoremap { {}<left>
+inoremap /* /**/<left><left>
+
+" ============================================================================
+" Tab and Completion Functions
+" ============================================================================
+
+" Smart Tab Function
+function! SmartIndentTab()
+    let line = getline('.')
+    let col = col('.') - 1
+
+    if col == 0 || line[col - 1] =~ '^\s*$'
+        return "\<C-T>"
+    else
+        return "\<tab>"
+    endif
+endfunction
+
+" Tab mappings
+silent! iunmap <tab>
+inoremap <silent><expr> <tab> SmartIndentTab()
+inoremap <expr> <CR> pumvisible() ? "\<C-Y>" : "\<CR>"
+
+" Auto-completion function
+function! AutoComplete()
+    let skip_filetypes = ['netrw', 'help', 'startify', 'qf', 'man', 'gitcommit']
+
+    if index(skip_filetypes, &filetype) >= 0
+        return
+    endif
+
+    let col = col('.')
+    if col < 4
+        return
+    endif
+
+    let line = getline('.')
+    let prev3 = line[col - 4]
+    let prev2 = line[col - 3]
+    let prev1 = line[col - 2]
+    let curr  = v:char
+
+    if curr =~ '\k' && prev3 !~ '\k' && prev2 =~ '\k' && prev1 =~ '\k'
+        call feedkeys("\<C-n>", 'n')
+    endif
+endfunction
+
+" ============================================================================
+" Spell Checking
+" ============================================================================
+noremap <silent> <C-z> :setlocal spell!<CR>
+setlocal nospell
+
+function! SpellCheckStatus()
+    return &spell ? ' [SPELL]' : ''
+endfunction
+
+" ============================================================================
+" File Explorer Configuration
+" ============================================================================
+let g:netrw_banner=0
+let g:netrw_browse_split=4
+let g:netrw_altv=1
+let g:netrw_liststyle=3
 let g:netrw_fastbrowse = 0
-autocmd FileType netrw setl bufhidden=wipe
+let g:netrw_winsize=20
 
-" Faster vimgrep/grep via ripgrep
+" ============================================================================
+" Search Tools Configuration
+" ============================================================================
 if executable("rg")
-  set grepprg=rg\ --vimgrep\ --no-heading
-  set grepformat=%f:%l:%c:%m,%f:%l:%m
+    set grepprg=rg\ --vimgrep\ --no-heading
+    set grepformat=%f:%l:%c:%m,%f:%l:%m
 endif
 
+" ============================================================================
+" Clipboard Configuration
+" ============================================================================
 
-"===============================================================================
-"                                  Colorscheme
-"===============================================================================
+" OS Detection
+let s:uname = substitute(system('uname'), '\n', '', '')
+let g:is_mac = has('mac')
+let g:is_linux = s:uname ==# 'Linux'
+let g:is_windows = has('win32') || has('win64') || s:uname =~? 'Windows'
+let g:is_wsl = has('wsl') || (g:is_linux && !empty($WSL_DISTRO_NAME))
+let g:is_termux = has('termux') || (!empty($PREFIX) && $PREFIX =~# 'com.termux')
+let g:is_wayland = !empty($WAYLAND_DISPLAY)
+let g:is_x11 = !empty($DISPLAY) && empty($WAYLAND_DISPLAY)
 
-" enable syntax, plugins (for netrw) and indentation
+" Clipboard configuration
+if has('unnamedplus')
+    set clipboard=unnamed,unnamedplus
+else
+    set clipboard=unnamed
+endif
+
+if has('clipboard')
+    " Linux: Wayland/X11 providers
+    if g:is_wayland && executable('wl-copy') && executable('wl-paste')
+        let g:clipboard = {
+                    \ 'name': 'wl-clipboard',
+                    \ 'copy': {
+                    \   '+': ['wl-copy', '--trim-newline'],
+                    \   '*': ['wl-copy', '--trim-newline', '--primary'],
+                    \ },
+                    \ 'paste': {
+                    \   '+': ['wl-paste', '--no-newline'],
+                    \   '*': ['wl-paste', '--no-newline', '--primary'],
+                    \ },
+                    \ 'cache_enabled': 1,
+                    \ }
+    elseif g:is_x11 && executable('xclip')
+        let g:clipboard = {
+                    \ 'name': 'xclip',
+                    \ 'copy': {
+                    \   '+': ['xclip', '-selection', 'clipboard'],
+                    \   '*': ['xclip', '-selection', 'primary'],
+                    \ },
+                    \ 'paste': {
+                    \   '+': ['xclip', '-selection', 'clipboard', '-o'],
+                    \   '*': ['xclip', '-selection', 'primary', '-o'],
+                    \ },
+                    \ 'cache_enabled': 1,
+                    \ }
+    elseif g:is_x11 && executable('xsel')
+        let g:clipboard = {
+                    \ 'name': 'xsel',
+                    \ 'copy': {
+                    \   '+': ['xsel', '--clipboard', '--input'],
+                    \   '*': ['xsel', '--primary',   '--input'],
+                    \ },
+                    \ 'paste': {
+                    \   '+': ['xsel', '--clipboard', '--output'],
+                    \   '*': ['xsel', '--primary',   '--output'],
+                    \ },
+                    \ 'cache_enabled': 1,
+                    \ }
+    " macOS: pbcopy/pbpaste
+    elseif g:is_mac && executable('pbcopy') && executable('pbpaste')
+        let g:clipboard = {
+                    \ 'name': 'macOS-clipboard',
+                    \ 'copy':  { '+': ['pbcopy'], '*': ['pbcopy'] },
+                    \ 'paste': { '+': ['pbpaste'], '*': ['pbpaste'] },
+                    \ 'cache_enabled': 1,
+                    \ }
+    " WSL: prefer win32yank, fallback to clip.exe + PowerShell
+    elseif g:is_wsl && executable('win32yank.exe')
+        let g:clipboard = {
+                    \ 'name': 'win32yank-wsl',
+                    \ 'copy':  { '+': ['win32yank.exe', '-i', '--crlf'],
+                    \            '*': ['win32yank.exe', '-i', '--crlf'] },
+                    \ 'paste': { '+': ['win32yank.exe', '-o', '--lf'],
+                    \            '*': ['win32yank.exe', '-o', '--lf'] },
+                    \ 'cache_enabled': 1,
+                    \ }
+    elseif g:is_wsl && executable('clip.exe') && executable('powershell.exe')
+        let g:clipboard = {
+                    \ 'name': 'wsl-clip',
+                    \ 'copy': {
+                    \   '+': ['clip.exe'],
+                    \   '*': ['clip.exe'],
+                    \ },
+                    \ 'paste': {
+                    \   '+': ['powershell.exe', '-NoProfile', '-Command',
+                    \          '[Console]::Out.Write((Get-Clipboard -Raw) -replace "`r","")'],
+                    \   '*': ['powershell.exe', '-NoProfile', '-Command',
+                    \          '[Console]::Out.Write((Get-Clipboard -Raw) -replace "`r","")'],
+                    \ },
+                    \ 'cache_enabled': 0,
+                    \ }
+    " Native Windows
+    elseif g:is_windows && !g:is_wsl && executable('win32yank.exe')
+        let g:clipboard = {
+                    \ 'name': 'win32yank',
+                    \ 'copy':  { '+': ['win32yank.exe', '-i', '--crlf'],
+                    \            '*': ['win32yank.exe', '-i', '--crlf'] },
+                    \ 'paste': { '+': ['win32yank.exe', '-o', '--lf'],
+                    \            '*': ['win32yank.exe', '-o', '--lf'] },
+                    \ 'cache_enabled': 1,
+                    \ }
+    elseif g:is_windows && !g:is_wsl && executable('powershell.exe')
+        let g:clipboard = {
+                    \ 'name': 'powershell-clipboard',
+                    \ 'copy': {
+                    \   '+': ['powershell.exe', '-NoProfile', '-Command',
+                    \          'Set-Clipboard ([Console]::In.ReadToEnd())'],
+                    \   '*': ['powershell.exe', '-NoProfile', '-Command',
+                    \          'Set-Clipboard ([Console]::In.ReadToEnd())'],
+                    \ },
+                    \ 'paste': {
+                    \   '+': ['powershell.exe', '-NoProfile', '-Command',
+                    \          '[Console]::Out.Write((Get-Clipboard -Raw) -replace "`r","")'],
+                    \   '*': ['powershell.exe', '-NoProfile', '-Command',
+                    \          '[Console]::Out.Write((Get-Clipboard -Raw) -replace "`r","")'],
+                    \ },
+                    \ 'cache_enabled': 0,
+                    \ }
+    endif
+endif
+
+" ============================================================================
+" Colorscheme and Appearance
+" ============================================================================
 syntax enable
-
-"set shell=zsh
 set termguicolors
 set guicursor=
 let &t_SI = "\e[6 q"
 let &t_EI = "\e[2 q"
-
-"colorscheme desert
-"colorscheme city-lights
 set background=dark
-highlight Normal guibg=NONE ctermbg=NONE
-highlight EndOfBuffer ctermfg=NONE ctermbg=NONE
 
+" Window title
+let progname = substitute($VIM, '.*[/\\]', '', '')
+set title titlestring=%{progname}\ %f\ +%l\ #%{tabpagenr()}.%{winnr()}
+if &term =~ '^screen' && !has('vim')
+    exe "set t_ts=\e]2; t_fs=\7"
+endif
 
-"-------------------------------------------------------------------------------
+colorscheme colorscheme
 
+" ============================================================================
+" Custom Functions
+" ============================================================================
 
-"===============================================================================
-"                               Functions/Scripts
-"===============================================================================
-
-" Enable mouse scrollback
-"---------------------------------------
-set mouse=a
-tnoremap <Esc> <C-\><C-n>
-tnoremap <c-b> <c-\><c-n>
+" Clear Terminal Buffer
 function! ClearTerminal()
-    set scrollback=1
-    let &g:scrollback=1
-    echo &scrollback
-    call feedkeys("\i")
-    call feedkeys("clear\<CR>")
-    call feedkeys("\<C-\>\<C-n>")
-    call feedkeys("\i")
-    sleep 100m
-    let &scrollback=s:scroll_value
-endfunction
-
-"-------------------------------------------------------------------------------
-
-" :Rename {newname}
-"---------------------------------------
-function! RenameFile()
-    let old_name = expand('%')
-    let new_name = input('New file name: ', expand('%'), 'file')
-    if new_name != '' && new_name != old_name
-        exec ':saveas ' . new_name
-        exec ':silent !rm ' . old_name
-        redraw!
+    if &buftype == 'terminal'
+        let s:scroll_value = &scrollback
+        set scrollback=1
+        call feedkeys("\<C-\\>\<C-n>i")
+        call feedkeys("clear\<CR>")
+        call timer_start(100, {-> execute('let &scrollback=' . s:scroll_value)})
     endif
 endfunction
-map <leader>r :call RenameFile()<cr>
 
-"-------------------------------------------------------------------------------
-
-" Return to the same line when we reopen a file
-"---------------------------------------
-  augroup line_return
-      au!
-      au BufReadPost *
-          \ if line("'\"") > 0 && line("'\"") <= line("$") |
-          \     execute 'normal! g`"zvzz' |
-          \ endif
-  augroup END
-
-"-------------------------------------------------------------------------------
-"
-" Function to update tmux status and .vi-mode file
-"---------------------------------------
-function! UpdateTmuxStatus() abort
-  " Check if the current buffer has a man filetype
-  if &filetype ==# 'man'
-    return
-  endif
-
-  " Determine the mode name based on the mode value
-  let mode = mode()
-  let mode_name = ''
-  if mode ==# 'n'
-    let mode_name = '-- NORMAL --'
-  elseif mode ==# 'i' || mode ==# 'ic'
-    let mode_name = '-- INSERT --'
-  else
-    let mode_name = '-- NORMAL --'
-  endif
-
-  " Write the mode name to the file
-  call writefile([mode_name], expand('$HOME') . '/.vi-mode')
-
+" Rename Current File
+function! RenameFile()
+    let old_name = expand('%')
+    let new_name = input('New file name: ', old_name, 'file')
+    if new_name != '' && new_name != old_name
+        try
+            execute 'saveas ' . fnameescape(new_name)
+            if filereadable(old_name) && !filereadable(new_name)
+                call delete(old_name)
+            endif
+            redraw!
+        catch /^Vim\%(\w\+\).*/
+            echohl ErrorMsg | echo 'Error renaming file: ' . v:exception | echohl None
+        endtry
+    endif
 endfunction
 
-" Function to refresh tmux status
-function! s:UpdateTmux() abort
-  call system('tmux refresh-client -S')
+" Format with cursor preservation
+function! PreserveCursorFormat()
+    let l:pos = getpos(".")
+    silent! normal! gg=G
+    call setpos('.', l:pos)
 endfunction
 
-" Set up autocommands for tmux status update
-if !empty($TMUX) && system('command -v tmux >/dev/null 2>&1') == 0
-augroup TmuxStatus
-  autocmd!
-  autocmd ModeChanged * call UpdateTmuxStatus() | call s:UpdateTmux()
+" File/URL opener
+function! OpenFileOrUrl(path) abort
+    if !exists('g:os_name')
+        echohl WarningMsg | echom 'OS detection not available' | echohl None
+        return
+    endif
+
+    let cmd = ''
+    if g:os_name ==# 'mac'
+        let cmd = 'open ' . shellescape(a:path)
+    elseif g:os_name ==# 'linux'
+        let cmd = 'xdg-open ' . shellescape(a:path) . ' >/dev/null 2>&1 &'
+    elseif g:os_name ==# 'wsl'
+        let cmd = 'wslview ' . shellescape(a:path) . ' >/dev/null 2>&1 &'
+    elseif g:os_name ==# 'windows'
+        let cmd = 'start "" ' . shellescape(a:path)
+    elseif g:os_name ==# 'termux'
+        let cmd = 'am start -a android.intent.action.VIEW -d ' . shellescape(a:path)
+    else
+        echohl WarningMsg | echom 'No file opener for OS: ' . g:os_name | echohl None
+        return
+    endif
+
+    call system(cmd)
+    if v:shell_error
+        echohl ErrorMsg | echom 'Failed to open: ' . a:path | echohl None
+    endif
+endfunction
+
+" ============================================================================
+" Hex Editing Functions
+" ============================================================================
+
+" Convert to hex
+function! DoHex() abort
+    let current_file = expand('%:p')
+    if empty(current_file)
+        echohl ErrorMsg | echo 'No file name' | echohl None
+        return
+    endif
+
+    let new_file = current_file . '.hex'
+    try
+        execute 'w !xxd > ' . fnameescape(new_file)
+        echohl Directory | echo 'Hex file created: ' . new_file | echohl None
+    catch /^Vim\%(\w\+\):/
+        echohl ErrorMsg | echo 'Error creating hex file: ' . v:exception | echohl None
+    endtry
+endfunction
+
+" Convert from hex
+function! UndoHex() abort
+    let current_file = expand('%:p')
+    if empty(current_file)
+        echohl ErrorMsg | echo 'No file name' | echohl None
+        return
+    endif
+
+    let new_file = substitute(current_file, '\.hex$', '', '')
+    if new_file ==# current_file
+        echohl WarningMsg | echo 'Not a .hex file' | echohl None
+        return
+    endif
+
+    try
+        execute '%!xxd -r'
+        execute 'w ' . fnameescape(new_file)
+        echohl Directory | echo 'Binary file restored: ' . new_file | echohl None
+    catch /^Vim\%(\w\+\):/
+        echohl ErrorMsg | echo 'Error converting hex file: ' . v:exception | echohl None
+    endtry
+endfunction
+
+" Hex state switcher
+function! HexState() abort
+    let choices = [
+                \ '1. Convert to hex',
+                \ '2. Convert from hex',
+                \ '3. Cancel'
+                \ ]
+
+    let choice = inputlist(choices)
+    if choice == 1
+        call DoHex()
+    elseif choice == 2
+        call UndoHex()
+    else
+        echo 'Operation cancelled.'
+    endif
+endfunction
+
+" ============================================================================
+" Commands
+" ============================================================================
+command! -nargs=0 OpenFile call OpenFileOrUrl(expand('%:p'))
+
+" ============================================================================
+" Auto Commands
+" ============================================================================
+
+" Return to last position
+augroup line_return
+    au!
+    au BufReadPost *
+                \ if line("'\"") > 0 && line("'\"") <= line("$") |
+                \     execute 'normal! g`"zvzz' |
+                \ endif
 augroup END
+
+" Auto-completion
+augroup AutoCompleteWordStart
+    autocmd!
+    autocmd InsertCharPre * call AutoComplete()
+augroup END
+
+" Relative numbers in insert mode
+autocmd InsertEnter * set norelativenumber
+autocmd InsertLeave * set relativenumber
+
+" Netrw cleanup
+autocmd FileType netrw setl bufhidden=wipe
+
+" Reload config
+augroup ReloadVimrc
+    autocmd!
+    autocmd BufWritePost $MYVIMRC nested source $MYVIMRC |
+                \ doautocmd ColorScheme |
+                \ call autoload#statusline#ActivateStatusline() |
+                \ echon "Reloaded .vimrc" |
+                \ redraw!
+augroup END
+
+" Auto format
+augroup FormatOnSave
+    autocmd!
+    autocmd BufWritePre * call PreserveCursorFormat()
+augroup END
+
+" ============================================================================
+" Statusline Configuration
+" ============================================================================
+let s:statusline_file = expand('~/.vim/autoload/statusline.vim')
+if filereadable(s:statusline_file)
+    execute 'source ' . fnameescape(s:statusline_file)
+
+    augroup StatuslineConfig
+        autocmd!
+        autocmd VimEnter * call autoload#statusline#ActivateStatusline()
+        autocmd ColorScheme * call autoload#statusline#UpdateStslineColors()
+        autocmd VimEnter * redrawstatus!
+    augroup END
+
+    set laststatus=2
+    set statusline=%!StatusLine()
+
+    augroup StatuslineOverride
+        autocmd!
+        autocmd FileType help,gitcommit,netrw setlocal statusline=%f\ %h%m%r%=%-14.(%l,%c%V%)\ %P
+    augroup END
 endif
 
-"-------------------------------------------------------------------------------
+" ============================================================================
+" GUI Configuration
+" ============================================================================
+if has('gui_running')
+    color slate
 
+    if has('mac')
+        set guifont=Menlo\ Regular:h14
+    elseif has('win32')
+        set guifont=Consolas:h12
+    else
+        set guifont=Monospace\ 11
+    endif
 
-"===============================================================================
-"                          Statusline Configuration
-"===============================================================================
+    set guioptions-=T
+    set guioptions-=r
+    set guioptions-=L
+    set guioptions-=m
 
-" Autoload statusline
-"---------------------------------------
-" Load statusline script
-if filereadable(expand("~/.vim/autoload/statusline.vim"))
-    source ~/.vim/autoload/statusline.vim
+    autocmd VimEnter * :Lexplore | wincmd p
 endif
 
-" Call the statusline activation function
-call autoload#statusline#ActivateStatusline()
+" ============================================================================
+" Final Setup
+" ============================================================================
+syntax on
+filetype plugin indent on
+setlocal keywordprg=:help
+setlocal iskeyword+=:
 
-"-------------------------------------------------------------------------------
+" Load matchit for better % matching
+if !exists('g:loaded_matchit') && findfile('plugin/matchit.vim', &rtp) ==# ''
+    runtime! macros/matchit.vim
+endif
+
+" ============================================================================
