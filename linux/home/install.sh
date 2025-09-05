@@ -423,7 +423,7 @@ print_dry_run() {
 }
 
 #======================================
-# Logging Functions (enhanced)
+# Logging Functions
 #======================================
 
 # Setup logging
@@ -493,7 +493,7 @@ log_message() {
 }
 
 #======================================
-# User Interaction Functions (enhanced)
+# User Interaction Functions
 #======================================
 
 # prompt function
@@ -1706,6 +1706,87 @@ setup_ssh() {
     mark_step_completed "setup_ssh"
 }
 
+# Helper function to detect the init system
+# Returns: systemd, openrc, runit, sysvinit, or unknown
+detect_init_system() {
+    if [ -d /run/systemd/system ]; then
+        echo "systemd"
+    elif command -v rc-service &>/dev/null; then
+        echo "openrc"
+    elif [ -d /etc/sv ]; then
+        echo "runit"
+    elif command -v service &>/dev/null; then
+        echo "sysvinit"
+    else
+        echo "unknown"
+    fi
+}
+
+# Helper function to manage a service (enable/start)
+# Usage: manage_service <action> <service_name>
+# action: enable | start
+manage_service() {
+    local action="$1"
+    local service="$2"
+    local init_system="$3"
+    local success=false
+
+    case "$init_system" in
+        systemd)
+            if [ "$action" == "enable" ]; then
+                execute_command "$PRIVILEGE_TOOL systemctl enable '$service'"
+                success=$?
+            elif [ "$action" == "start" ]; then
+                execute_command "$PRIVILEGE_TOOL systemctl start '$service'"
+                success=$?
+            fi
+            ;;
+        openrc)
+            if [ "$action" == "enable" ]; then
+                execute_command "$PRIVILEGE_TOOL rc-update add '$service' default"
+                success=$?
+            elif [ "$action" == "start" ]; then
+                execute_command "$PRIVILEGE_TOOL rc-service '$service' start"
+                success=$?
+            fi
+            ;;
+        runit)
+            if [ "$action" == "enable" ]; then
+                # Runit services are enabled by creating a symlink in the run level directory
+                execute_command "$PRIVILEGE_TOOL ln -sf /etc/sv/'$service' /var/service/"
+                success=$?
+            elif [ "$action" == "start" ]; then
+                # The 'start' action is usually implied by the symlink, but you can
+                # manually start it if needed
+                execute_command "$PRIVILEGE_TOOL sv start '$service'"
+                success=$?
+            fi
+            ;;
+        sysvinit|unknown)
+            # Use the generic 'service' command
+            if [ "$action" == "start" ]; then
+                execute_command "$PRIVILEGE_TOOL service '$service' start"
+                success=$?
+            fi
+            # Enabling is system-dependent for sysvinit/unknown; we'll check for chkconfig
+            if [ "$action" == "enable" ]; then
+                if command -v chkconfig &>/dev/null; then
+                    execute_command "$PRIVILEGE_TOOL chkconfig '$service' on"
+                    success=$?
+                else
+                    success=0
+                fi
+            fi
+            ;;
+        *)
+            print_error "Unknown init system: $init_system. Cannot $action service '$service'."
+            return 1
+            ;;
+    esac
+
+    return $((1 - success))
+}
+
 # Configure system services
 configure_services() {
     print_section "Configuring System Services"
@@ -1717,12 +1798,16 @@ configure_services() {
         return 0
     fi
 
+    # Detect the init system once
+    local INIT_SYSTEM=$(detect_init_system)
+    print_info "Detected Init System: $INIT_SYSTEM"
+
     # Enable TLP for laptop power management
     if command_exists tlp; then
         print_info "TLP is installed"
         if [[ "$FORCE_MODE" == true ]] || prompt_user "Enable TLP power management service?"; then
-            if execute_command "$PRIVILEGE_TOOL systemctl enable tlp"; then
-                execute_command "$PRIVILEGE_TOOL systemctl start tlp"
+            if manage_service "enable" "tlp" "$INIT_SYSTEM"; then
+                manage_service "start" "tlp" "$INIT_SYSTEM"
                 print_success "TLP enabled and started"
             else
                 print_error "Failed to enable TLP"
@@ -1736,8 +1821,8 @@ configure_services() {
         esac
 
         if command_exists tlp; then
-            execute_command "$PRIVILEGE_TOOL systemctl enable tlp"
-            execute_command "$PRIVILEGE_TOOL systemctl start tlp"
+            manage_service "enable" "tlp" "$INIT_SYSTEM"
+            manage_service "start" "tlp" "$INIT_SYSTEM"
             print_success "TLP installed, enabled and started"
         fi
     fi
@@ -1746,13 +1831,14 @@ configure_services() {
     local services_to_enable=()
 
     # Check for and configure common services
-    if command_exists docker && ! systemctl is-enabled docker &>/dev/null; then
+    # NOTE: The 'is-enabled' check is non-portable and removed for simplicity
+    if command_exists docker; then
         if [[ "$FORCE_MODE" == true ]] || prompt_user "Enable Docker service?"; then
             services_to_enable+=("docker")
         fi
     fi
 
-    if command_exists bluetooth && ! systemctl is-enabled bluetooth &>/dev/null; then
+    if command_exists bluetooth; then
         if [[ "$FORCE_MODE" == true ]] || prompt_user "Enable Bluetooth service?"; then
             services_to_enable+=("bluetooth")
         fi
@@ -1760,8 +1846,8 @@ configure_services() {
 
     # Enable selected services
     for service in "${services_to_enable[@]}"; do
-        if execute_command "$PRIVILEGE_TOOL systemctl enable '$service'"; then
-            execute_command "$PRIVILEGE_TOOL systemctl start '$service'"
+        if manage_service "enable" "$service" "$INIT_SYSTEM"; then
+            manage_service "start" "$service" "$INIT_SYSTEM"
             print_success "Enabled and started $service"
         else
             print_error "Failed to enable $service"
