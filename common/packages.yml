@@ -1,0 +1,859 @@
+# Core packages needed by all installations
+common:
+  - git
+  - curl
+  - wget
+  - yq
+
+# Essential packages for basic functionality
+essentials:
+  - zsh
+  - zsh-completions # git clone rather
+  - bash
+  - bash-completion
+  - vim
+  - neovim
+  - tmux
+  - openssh
+  - sudo
+  - man-pages
+  - man-db
+  - bc
+  - time
+  - rsync
+  - tree-sitter
+  - xdg-user-dirs
+
+# Minimal development environment
+minimal:
+  - gcc
+  - make
+  - python3
+  - python-pip
+  - jq
+  - fzf
+
+# Full development environment
+dev:
+  - clang
+  - gcc
+  - meson
+  - gdb
+  - make
+  - cmake
+  - go
+  - ninja
+  - ripgrep
+  - fd
+  - python3
+  - python-pip
+  - python-virtualenvwrapper
+  - nodejs
+  - jq
+  - fzf
+  - emacs
+  - vscode
+
+# Server-focused packages
+server:
+  - ufw
+  - net-tools
+  - iftop
+  - iotop
+  - atop
+  - btop
+  - htop
+  - powertop
+  - reflector
+  - clamav
+  - ntpsec
+  - networkmanager
+  - smartmontools
+  - hdparm
+  - acpi
+  - dosfstools
+  - ntfs-3g
+  - nfs-utils
+  - parted
+  - cups
+  - sysstat
+  - hwinfo
+
+# Desktop environment packages
+desktop:
+  - xorg
+  - xorg-server
+  - wayland
+  - xorg-xwayland
+  - xclip
+  - xsel
+  - xterm
+  - gtk
+  - dunst
+  - firefox
+  - mpv
+  - discord
+  - libinput
+  - xf86-input-libinput
+  - xf86-input-synaptics
+  - nnn
+  - ranger
+  - qbittorrent
+  - obs-studio
+  - unrar
+  - unzip
+  - p7zip
+  - imagemagick
+  - ffmpeg
+  - wezterm
+  - wmctrl
+  - xdo
+  - xdotool
+  - xbindkeys
+  - ncdu
+  - fcitx
+  - picom
+  - rofi
+  - wofi
+  - pkgfile
+  - jgmenu
+  - udiskie
+  - brightnessctl
+  - slurp
+  - swappy
+  - swww
+  - wayshot
+  - wf-recorder
+  - wl-clipboard
+  - nemo
+  - blueman
+  - bluez
+  - bluez-utils
+  - bluez-tools
+
+# Window managers and desktop environments
+wm:
+  - hyprland
+  - bspwm
+  - sxhkd
+  - polybar
+  - eww
+
+# Audio/Media packages
+media:
+  - mpd
+  - wireplumber
+  - pipewire
+  - ncmpcpp
+  - xdg-desktop-portal-wlr
+
+# Gaming and wine
+gaming:
+  - wine
+  - winetricks
+  - steam
+  - cabextract
+
+# Virtualization
+virtualization:
+  - libvirt
+  - qemu-full
+
+# Fonts
+fonts:
+  - ttf-hack
+  - ttf-nerd-fonts-symbols-mono
+  - ttf-font-awesome
+  - ttf-dejavu
+
+# Rust packages (installed via cargo)
+rust:
+  - ripgrep
+  - fd-find
+  - bat
+  - exa
+  - starship
+  - matugen
+
+# Language-specific packages
+languages:
+  node:
+    - typescript
+    - eslint
+    - prettier
+  python:
+    - black
+    - flake8
+    - mypy
+    - requests
+
+#======================================
+# Distribution-specific package mappings
+#======================================
+
+# Arch Linux and derivatives (Manjaro, EndeavourOS, etc.)
+arch:
+  nodejs: nodejs
+  python3: python
+  python-pip: python-pip
+  python-virtualenvwrapper: python-virtualenvwrapper
+  htop: htop
+  qemu-full: qemu-full
+  bluez-utils: bluez-utils
+  bluez-tools: bluez-tools
+  ntfs-3g: ntfs-3g
+  ttf-hack: ttf-hack
+  ttf-nerd-fonts-symbols-mono: ttf-nerd-fonts-symbols-mono
+  ttf-font-awesome: ttf-font-awesome
+  ttf-dejavu: ttf-dejavu
+  man-pages: man-pages
+  man-db: man-db
+  xorg: xorg
+  xorg-server: xorg-server
+  xorg-xwayland: xorg-xwayland
+  networkmanager: networkmanager
+  reflector: reflector
+  pkgfile: pkgfile
+  tree-sitter: tree-sitter-cli
+  vscode: code
+
+# Debian and derivatives (Ubuntu, Mint, Pop!_OS, etc.)
+debian:
+  nodejs: nodejs
+  python3: python3
+  python-pip: python3-pip
+  python-virtualenvwrapper: virtualenvwrapper
+  htop: htop
+  qemu-full: qemu-system
+  bluez-utils: bluez
+  bluez-tools: bluez-tools
+  ntfs-3g: ntfs-3g
+  ttf-hack: fonts-hack
+  ttf-nerd-fonts-symbols-mono: fonts-nerd-font-symbols
+  ttf-font-awesome: fonts-font-awesome
+  ttf-dejavu: fonts-dejavu
+  man-pages: manpages-dev
+  man-db: man-db
+  xorg: xorg
+  xorg-server: xserver-xorg
+  xorg-xwayland: xwayland
+  networkmanager: network-manager
+  reflector: apt-mirror
+  pkgfile: apt-file
+  tree-sitter: tree-sitter-cli
+  vscode: code
+  zsh-completions: zsh-autosuggestions
+  bash-completion: bash-completion
+  openssh: openssh-client
+  yq: yq
+  fd: fd-find
+  ripgrep: ripgrep
+  fzf: fzf
+  neovim: neovim
+  tmux: tmux
+  git: git
+  curl: curl
+  wget: wget
+  vim: vim
+  gcc: gcc
+  clang: clang
+  make: make
+  cmake: cmake
+  meson: meson
+  ninja: ninja-build
+  gdb: gdb
+  go: golang-go
+  jq: jq
+  emacs: emacs
+  bc: bc
+  time: time
+  rsync: rsync
+  ufw: ufw
+  net-tools: net-tools
+  iftop: iftop
+  iotop: iotop
+  atop: atop
+  btop: btop
+  powertop: powertop
+  clamav: clamav
+  ntpsec: ntp
+  smartmontools: smartmontools
+  hdparm: hdparm
+  acpi: acpi
+  dosfstools: dosfstools
+  nfs-utils: nfs-common
+  parted: parted
+  cups: cups
+  sysstat: sysstat
+  hwinfo: hwinfo
+  wayland: libwayland-dev
+  xclip: xclip
+  xsel: xsel
+  xterm: xterm
+  gtk: libgtk-3-dev
+  dunst: dunst
+  firefox: firefox
+  mpv: mpv
+  discord: discord
+  libinput: libinput10
+  xf86-input-libinput: xserver-xorg-input-libinput
+  xf86-input-synaptics: xserver-xorg-input-synaptics
+  nnn: nnn
+  ranger: ranger
+  qbittorrent: qbittorrent
+  obs-studio: obs-studio
+  unrar: unrar
+  unzip: unzip
+  p7zip: p7zip-full
+  imagemagick: imagemagick
+  ffmpeg: ffmpeg
+  wezterm: wezterm
+  wmctrl: wmctrl
+  xdo: xdo
+  xdotool: xdotool
+  xbindkeys: xbindkeys
+  ncdu: ncdu
+  fcitx: fcitx
+  picom: picom
+  rofi: rofi
+  wofi: wofi
+  jgmenu: jgmenu
+  udiskie: udiskie
+  brightnessctl: brightnessctl
+  slurp: slurp
+  swappy: swappy
+  wf-recorder: wf-recorder
+  wl-clipboard: wl-clipboard
+  nemo: nemo
+  mpd: mpd
+  wireplumber: wireplumber
+  pipewire: pipewire
+  ncmpcpp: ncmpcpp
+  xdg-desktop-portal-wlr: xdg-desktop-portal-wlr
+  blueman: blueman
+  wine: wine
+  winetricks: winetricks
+  steam: steam
+  cabextract: cabextract
+  libvirt: libvirt-daemon-system
+  hyprland: hyprland
+  bspwm: bspwm
+  sxhkd: sxhkd
+  polybar: polybar
+  eww: eww
+  xdg-user-dirs: xdg-user-dirs
+
+# Red Hat and derivatives (RHEL, CentOS, Fedora, Rocky, AlmaLinux)
+rhel:
+  nodejs: nodejs
+  python3: python3
+  python-pip: python3-pip
+  python-virtualenvwrapper: python3-virtualenvwrapper
+  htop: htop
+  qemu-full: qemu-kvm
+  bluez-utils: bluez
+  bluez-tools: bluez-tools
+  ntfs-3g: ntfs-3g
+  ttf-hack: adobe-source-code-pro-fonts
+  ttf-nerd-fonts-symbols-mono: powerline-fonts
+  ttf-font-awesome: fontawesome-fonts
+  ttf-dejavu: dejavu-fonts-common
+  man-pages: man-pages
+  man-db: man-db
+  xorg: xorg-x11-server-Xorg
+  xorg-server: xorg-x11-server-Xorg
+  xorg-xwayland: xorg-x11-server-Xwayland
+  networkmanager: NetworkManager
+  reflector: yum-utils
+  tree-sitter: tree-sitter-cli
+  vscode: code
+  zsh-completions: zsh-completions
+  bash-completion: bash-completion
+  openssh: openssh-clients
+  yq: yq
+  fd: fd-find
+  ripgrep: ripgrep
+  fzf: fzf
+  neovim: neovim
+  tmux: tmux
+  git: git
+  curl: curl
+  wget: wget
+  vim: vim-enhanced
+  gcc: gcc
+  clang: clang
+  make: make
+  cmake: cmake
+  meson: meson
+  ninja: ninja-build
+  gdb: gdb
+  go: golang
+  jq: jq
+  emacs: emacs
+  bc: bc
+  time: time
+  rsync: rsync
+  ufw: firewalld
+  net-tools: net-tools
+  iftop: iftop
+  iotop: iotop
+  atop: atop
+  btop: btop
+  powertop: powertop
+  clamav: clamav
+  ntpsec: chrony
+  smartmontools: smartmontools
+  hdparm: hdparm
+  acpi: acpi
+  dosfstools: dosfstools
+  nfs-utils: nfs-utils
+  parted: parted
+  cups: cups
+  sysstat: sysstat
+  hwinfo: hwinfo
+
+# openSUSE and SLES
+opensuse:
+  nodejs: nodejs16
+  python3: python3
+  python-pip: python3-pip
+  python-virtualenvwrapper: python3-virtualenvwrapper
+  htop: htop
+  qemu-full: qemu
+  bluez-utils: bluez
+  bluez-tools: bluez-tools
+  ntfs-3g: ntfs-3g
+  ttf-hack: adobe-sourcecodepro-fonts
+  ttf-nerd-fonts-symbols-mono: powerline-fonts
+  ttf-font-awesome: fontawesome-fonts
+  ttf-dejavu: dejavu-fonts
+  man-pages: man-pages
+  man-db: man
+  xorg: xorg-x11-server
+  xorg-server: xorg-x11-server
+  xorg-xwayland: xwayland
+  networkmanager: NetworkManager
+  reflector: zypper
+  tree-sitter: tree-sitter
+  vscode: code
+
+# Gentoo and Funtoo (with full package paths)
+gentoo:
+  git: dev-vcs/git
+  curl: net-misc/curl
+  wget: net-misc/wget
+  yq: app-misc/yq
+  zsh: app-shells/zsh
+  zsh-completions: app-shells/zsh-completions
+  bash: app-shells/bash
+  bash-completion: app-shells/bash-completion
+  vim: app-editors/vim
+  neovim: app-editors/neovim
+  tmux: app-misc/tmux
+  openssh: net-misc/openssh
+  sudo: app-admin/sudo
+  man-pages: sys-apps/man-pages
+  man-db: sys-apps/man-db
+  bc: sys-devel/bc
+  time: sys-process/time
+  rsync: net-misc/rsync
+  tree-sitter: dev-libs/tree-sitter
+  xdg-user-dirs: x11-misc/xdg-user-dirs
+  gcc: sys-devel/gcc
+  clang: sys-devel/clang
+  make: sys-devel/make
+  cmake: dev-util/cmake
+  meson: dev-util/meson
+  gdb: sys-devel/gdb
+  ninja: dev-util/ninja
+  ripgrep: sys-apps/ripgrep
+  fd: sys-apps/fd
+  python3: dev-lang/python
+  python-pip: dev-python/pip
+  python-virtualenvwrapper: dev-python/virtualenvwrapper
+  nodejs: net-libs/nodejs
+  jq: app-misc/jq
+  fzf: app-shells/fzf
+  emacs: app-editors/emacs
+  vscode: app-editors/vscode
+  go: dev-lang/go
+  htop: sys-process/htop
+  ufw: net-firewall/ufw
+  net-tools: sys-apps/net-tools
+  iftop: net-analyzer/iftop
+  iotop: sys-process/iotop
+  atop: sys-process/atop
+  btop: sys-process/btop
+  powertop: sys-power/powertop
+  clamav: app-antivirus/clamav
+  reflector: app-portage/mirrorselect
+  ntpsec: net-misc/chrony
+  networkmanager: net-misc/networkmanager
+  smartmontools: sys-apps/smartmontools
+  hdparm: sys-apps/hdparm
+  acpi: sys-power/acpi
+  dosfstools: sys-fs/dosfstools
+  ntfs-3g: sys-fs/ntfs3g
+  nfs-utils: net-fs/nfs-utils
+  parted: sys-block/parted
+  cups: net-print/cups
+  sysstat: app-admin/sysstat
+  hwinfo: sys-apps/hwinfo
+  xorg: x11-base/xorg-server
+  xorg-server: x11-base/xorg-server
+  wayland: dev-libs/wayland
+  xorg-xwayland: x11-base/xwayland
+  xclip: x11-misc/xclip
+  xsel: x11-misc/xsel
+  xterm: x11-terms/xterm
+  gtk: x11-libs/gtk+
+  dunst: x11-misc/dunst
+  firefox: www-client/firefox
+  mpv: media-video/mpv
+  discord: net-im/discord-bin
+  libinput: dev-libs/libinput
+  xf86-input-libinput: x11-drivers/xf86-input-libinput
+  xf86-input-synaptics: x11-drivers/xf86-input-synaptics
+  nnn: app-misc/nnn
+  ranger: app-misc/ranger
+  qbittorrent: net-p2p/qbittorrent
+  obs-studio: media-video/obs-studio
+  unrar: app-arch/unrar
+  unzip: app-arch/unzip
+  p7zip: app-arch/p7zip
+  imagemagick: media-gfx/imagemagick
+  ffmpeg: media-video/ffmpeg
+  wezterm: x11-terms/wezterm
+  wmctrl: x11-misc/wmctrl
+  xdo: x11-misc/xdo
+  xdotool: x11-misc/xdotool
+  xbindkeys: x11-misc/xbindkeys
+  ncdu: sys-fs/ncdu
+  fcitx: app-i18n/fcitx
+  picom: x11-misc/picom
+  rofi: x11-misc/rofi
+  wofi: gui-apps/wofi
+  pkgfile: sys-apps/pkgcore
+  jgmenu: x11-misc/jgmenu
+  udiskie: sys-fs/udiskie
+  brightnessctl: app-misc/brightnessctl
+  slurp: gui-apps/slurp
+  swappy: gui-apps/swappy
+  swww: gui-apps/swww
+  wayshot: gui-apps/wayshot
+  wf-recorder: gui-apps/wf-recorder
+  wl-clipboard: gui-apps/wl-clipboard
+  nemo: gnome-extra/nemo
+  mpd: media-sound/mpd
+  wireplumber: media-video/wireplumber
+  pipewire: media-video/pipewire
+  ncmpcpp: media-sound/ncmpcpp
+  xdg-desktop-portal-wlr: gui-libs/xdg-desktop-portal-wlr
+  blueman: net-wireless/blueman
+  bluez: net-wireless/bluez
+  bluez-utils: net-wireless/bluez
+  bluez-tools: net-wireless/bluez-tools
+  wine: app-emulation/wine-vanilla
+  winetricks: app-emulation/winetricks
+  steam: games-util/steam-launcher
+  cabextract: app-arch/cabextract
+  libvirt: app-emulation/libvirt
+  qemu-full: app-emulation/qemu
+  hyprland: gui-wm/hyprland
+  bspwm: x11-wm/bspwm
+  sxhkd: x11-misc/sxhkd
+  polybar: x11-misc/polybar
+  eww: gui-apps/eww
+  ttf-hack: media-fonts/hack
+  ttf-nerd-fonts-symbols-mono: media-fonts/nerd-fonts
+  ttf-font-awesome: media-fonts/fontawesome
+  ttf-dejavu: media-fonts/dejavu
+
+# Alpine Linux
+alpine:
+  nodejs: nodejs
+  python3: python3
+  python-pip: py3-pip
+  htop: htop
+  git: git
+  curl: curl
+  wget: wget
+  vim: vim
+  neovim: neovim
+  tmux: tmux
+  openssh: openssh-client
+  sudo: sudo
+  bash: bash
+  zsh: zsh
+  gcc: gcc
+  make: make
+  jq: jq
+
+# Void Linux
+void:
+  nodejs: nodejs
+  python3: python3
+  python-pip: python3-pip
+  htop: htop
+  git: git
+  curl: curl
+  wget: wget
+  vim: vim
+  neovim: neovim
+  tmux: tmux
+  openssh: openssh
+  sudo: sudo
+  bash: bash
+  zsh: zsh
+  gcc: gcc
+  make: make
+  jq: jq
+
+# macOS packages (via Homebrew)
+macos:
+  - git
+  - curl
+  - wget
+  - yq
+  - zsh
+  - bash
+  - vim
+  - neovim
+  - tmux
+  - openssh
+  - python3
+  - node
+  - jq
+  - fzf
+  - ripgrep
+  - fd
+  - bat
+  - exa
+  - htop
+  - rsync
+  - cmake
+  - ninja
+  - go
+  - clang-format
+  - emacs
+  - visual-studio-code
+
+# Windows packages (via Chocolatey/Scoop/Winget)
+windows:
+  - git
+  - ripgrep
+  - fd
+  - win32yank
+  - microsoft-windows-terminal
+  - wsl
+  - firefox
+  - setdefaultbrowser
+  - nodejs
+  - bat
+  - 7zip
+  - python
+  - javaruntime
+  - autohotkey
+  - bitwarden
+  - notepadplusplus
+  - neovim
+  - vscode
+
+#======================================
+# Gentoo USE flags configuration
+#======================================
+
+gentoo_use_flags:
+  # Core system packages
+  git: "curl gpg perl python"
+  curl: "ssl http2 ipv6"
+  wget: "ssl ipv6 nls"
+
+  # Shells and terminal tools
+  zsh: "unicode pcre gdbm"
+  bash: "net nls readline"
+  tmux: "vim-syntax"
+
+  # Editors
+  vim: "python lua ruby perl cscope"
+  neovim: "lua python ruby"
+  emacs: "gtk jpeg png svg tiff xpm cairo dbus gconf gsettings imagemagick json ssl xml xwidgets"
+
+  # Development tools
+  gcc: "cxx fortran graphite jit nptl openmp pch pie ssp"
+  clang: "static-analyzer"
+  python: "sqlite ssl readline ncurses xml"
+  nodejs: "ssl"
+
+  # System utilities
+  htop: "unicode lm-sensors"
+  openssh: "ssl kerberos ldap pam"
+
+  # Desktop environment
+  firefox: "dbus gtk3 pulseaudio startup-notification wifi"
+  mpv: "alsa pulseaudio lua drm wayland X"
+  gtk: "wayland X cups introspection"
+
+  # Audio/Video
+  pipewire: "alsa bluetooth jack pulseaudio sound-server"
+  ffmpeg: "alsa encode mp3 opus pulseaudio theora vorbis webp x264 x265"
+
+  # Networking
+  networkmanager: "bluetooth dhclient introspection modemmanager ppp wifi"
+  bluez: "alsa cups obex readline"
+
+  # Virtualization
+  qemu-full: "aio alsa bluetooth curl fdt gtk jpeg ncurses nls opengl png pulseaudio sdl spice ssh static-user usb vhost-net virgl vnc"
+  libvirt: "firewalld libssh lvm nfs nls numa parted pcap policykit qemu sasl udev vepa virt-network virtualbox xen"
+
+#======================================
+# Windows-specific configurations
+#======================================
+
+# Windows bloatware removal lists
+windows_bloatware:
+  - BioEnrollment
+  - ContactSupport
+  - Cortana
+  - Feedback
+  - Flash
+  - Maps
+  - OneDrive
+  - Wallet
+
+# Default Windows 10/11 apps to remove
+windows_default_apps:
+  - Microsoft.Appconnector
+  - Microsoft.BingFinance
+  - Microsoft.BingNews
+  - Microsoft.BingSports
+  - Microsoft.BingTranslator
+  - Microsoft.BingWeather
+  - Microsoft.MicrosoftOfficeHub
+  - Microsoft.MicrosoftSolitaireCollection
+  - Microsoft.MicrosoftPowerBIForWindows
+  - Microsoft.MinecraftUWP
+  - Microsoft.Office.OneNote
+  - Microsoft.People
+  - Microsoft.SkypeApp
+  - Microsoft.Wallet
+  - Microsoft.WindowsCamera
+  - microsoft.windowscommunicationsapps
+  - Microsoft.WindowsMaps
+  - Microsoft.WindowsPhone
+  - Microsoft.WindowsSoundRecorder
+  - Microsoft.WindowsStore
+  - Microsoft.ZuneMusic
+  - Microsoft.ZuneVideo
+  - Microsoft.CommsPhone
+  - Microsoft.ConnectivityStore
+  - Microsoft.GetHelp
+  - Microsoft.Getstarted
+  - Microsoft.Messaging
+  - Microsoft.Office.Sway
+  - Microsoft.OneConnect
+  - Microsoft.WindowsFeedbackHub
+  - Microsoft.BingFoodAndDrink
+  - Microsoft.BingTravel
+  - Microsoft.BingHealthAndFitness
+  - Microsoft.WindowsReadingList
+  - king.com.CandyCrushSaga
+  - king.com.CandyCrushSodaSaga
+  - king.com.*
+  - Facebook.Facebook
+
+#======================================
+# Additional configurations
+#======================================
+
+# Source installations (git repositories)
+source_packages:
+  - name: "Aylur/astal.git"
+    url: "https://github.com/Aylur/astal.git"
+    build_deps: ["nodejs", "meson", "ninja"]
+  - name: "Aylur/icon-theme-browser.git"
+    url: "https://github.com/Aylur/icon-theme-browser.git"
+    build_deps: ["nodejs", "meson", "ninja"]
+
+# Custom build instructions
+custom_builds:
+  icon-theme-browser:
+    instructions: |
+      git clone https://github.com/Aylur/icon-theme-browser.git /tmp/icon-theme-browser
+      cd /tmp/icon-theme-browser
+      npm install
+      meson setup --prefix /usr build
+      meson install -C build
+
+# Kubernetes tools
+kubernetes:
+  - kubectl
+  - kubernetes-helm
+  - kubeseal
+  - kubeswitch
+  - lazydocker
+
+# Distribution-specific additional packages
+linux_distro_specific:
+  arch:
+    - dkms
+    - linux
+    - linux-headers
+    - linux-tools
+    - base-devel
+    - bind-tools
+    - nvme-cli
+    - vulkan-devel
+    - lm_sensors
+    - pacman-contrib
+    - yay
+  debian:
+    - build-essential
+    - linux-headers-generic
+    - apt-transport-https
+    - ca-certificates
+    - gnupg
+    - lsb-release
+    - software-properties-common
+    - dkms
+  rhel:
+    - kernel-devel
+    - kernel-headers
+    - gcc-c++
+    - epel-release
+    - dnf-plugins-core
+    - development-tools
+  opensuse:
+    - kernel-devel
+    - gcc-c++
+    - patterns-devel-base-devel_basis
+    - zypper-plugins
+  gentoo:
+    - sys-kernel/gentoo-sources
+    - sys-apps/portage
+    - app-portage/eix
+    - app-portage/gentoolkit
+    - sys-devel/gcc
+    - sys-devel/make
+
+# Profile-specific configurations
+profile_configs:
+  server:
+    services_enable:
+      - sshd
+      - firewalld
+      - chronyd
+    services_disable:
+      - bluetooth
+      - cups
+  desktop:
+    services_enable:
+      - bluetooth
+      - cups
+      - NetworkManager
+    desktop_tweaks: true
+  dev:
+    install_development_tools: true
+    configure_git: true
+    install_rust: true
+    install_nodejs: true
