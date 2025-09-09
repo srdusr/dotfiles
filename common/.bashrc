@@ -50,7 +50,7 @@ alias wallset='feh --bg-fill'
 if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     # Core git wrapper with repository as work-tree
     _config() {
-        git --git-dir="$HOME/.cfg" --work-tree="$HOME" "$@"
+        git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
     }
 
     # Detect OS
@@ -165,7 +165,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     # Main config command
     config() {
         local cmd="$1"; shift
-
+        local target_dir=""
         # Parse optional --target flag for add
         if [[ "$cmd" == "add" ]]; then
             while [[ "$1" == --* ]]; do
@@ -188,13 +188,10 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 for file_path in "$@"; do
                     local repo_path
                     if [[ -n "$target_dir" ]]; then
-                        # Keep relative path inside target_dir
                         local rel_path
                         if [[ "$file_path" == /* ]]; then
-                            # Absolute path → just take the filename
                             rel_path="$(basename "$file_path")"
                         else
-                            # Relative path → preserve nested dirs
                             rel_path="$file_path"
                         fi
                         repo_path="$target_dir/$rel_path"
@@ -204,11 +201,8 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
 
                     local full_repo_path="$HOME/.cfg/$repo_path"
                     mkdir -p "$(dirname "$full_repo_path")"
-
-                    # Copy the file safely
                     cp -a "$file_path" "$full_repo_path"
 
-                    # Add to git safely
                     git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" add "$repo_path"
 
                     echo "Added: $file_path -> $repo_path"
@@ -288,20 +282,47 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 ;;
             deploy)
                 _config ls-files | while read -r repo_file; do
-                    local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
-                    if [[ -e "$full_repo_path" ]]; then
-                        if [[ -n "$sys_file" ]]; then
-                            local dest_dir="$(dirname "$sys_file")"
-                            if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
-                                _sudo_prompt mkdir -p "$dest_dir"
-                                _sudo_prompt cp -a "$full_repo_path" "$sys_file"
-                            else
-                                mkdir -p "$dest_dir"
-                                cp -a "$full_repo_path" "$sys_file"
-                            fi
-                            echo "Deployed: $repo_file -> $sys_file"
+                    local sys_file="$(_sys_path "$repo_file")"  # destination only
+
+                    # Only continue if the source exists
+                    if [[ -e "$full_repo_path" && -n "$sys_file" ]]; then
+                        local dest_dir
+                        dest_dir="$(dirname "$sys_file")"
+
+                        # Create destination if needed
+                        if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
+                            _sudo_prompt mkdir -p "$dest_dir"
+                            _sudo_prompt cp -a "$full_repo_path" "$sys_file"
+                        else
+                            mkdir -p "$dest_dir"
+                            cp -a "$full_repo_path" "$sys_file"
                         fi
+
+                        echo "Deployed: $repo_file -> $sys_file"
+                    fi
+                done
+                ;;
+            checkout)
+                echo "Checking out dotfiles from .cfg..."
+                _config ls-files | while read -r repo_file; do
+                    local full_repo_path="$HOME/.cfg/$repo_file"
+                    local sys_file="$(_sys_path "$repo_file")"
+
+                    if [[ -e "$full_repo_path" && -n "$sys_file" ]]; then
+                        local dest_dir
+                        dest_dir="$(dirname "$sys_file")"
+
+                        # Create destination if it doesn't exist
+                        if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
+                            _sudo_prompt mkdir -p "$dest_dir"
+                            _sudo_prompt cp -a "$full_repo_path" "$sys_file"
+                        else
+                            mkdir -p "$dest_dir"
+                            cp -a "$full_repo_path" "$sys_file"
+                        fi
+
+                        echo "Checked out: $repo_file -> $sys_file"
                     fi
                 done
                 ;;
