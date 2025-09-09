@@ -90,18 +90,15 @@ if command -v fzf >/dev/null 2>&1; then
 fi
 
 
-
-#source $(which virtualenvwrapper.sh)
-
-# Suggest aliases for commands
-source ~/.config/zsh/plugins/zsh-you-should-use/you-should-use.plugin.zsh
-
-# Load zsh-syntax-highlighting
-source ~/.config/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-
-# Load fish like auto suggestions
-source ~/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh
-source ~/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+# Source plugins
+for plugin in \
+  "$HOME/.config/zsh/plugins/zsh-you-should-use/you-should-use.plugin.zsh" \
+  "$HOME/.config/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+  "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh" \
+  "$HOME/.config/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+do
+  [ -f "$plugin" ] && source "$plugin"
+done
 
 DISABLE_MAGIC_FUNCTIONS=true
 
