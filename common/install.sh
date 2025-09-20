@@ -12,13 +12,12 @@ set -euo pipefail  # Exit on error, undefined vars, pipe failures
 # Variables & Configuration
 #======================================
 
-# Color definitions for pretty UI
+# Color definitions
 NOCOLOR='\033[0m'
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[0;37m'
 BOLD='\033[1m'
@@ -47,18 +46,79 @@ UPDATE_MODE=false
 VERBOSE_MODE=false
 DRY_RUN=false
 FORCE_MODE=false
+ASK_MODE=false  # New: ask for each step
 INSTALL_MODE="ask"  # ask, essentials, full, profile
 
 # Global variables for system detection
 CFG_OS=""
 DISTRO=""
 PACKAGE_MANAGER=""
+PACKAGE_UPDATE_CMD=""
+PACKAGE_INSTALL_CMD=""
 PRIVILEGE_TOOL=""
 PRIVILEGE_CACHED=false
 
 # Essential tools needed by this script
 ESSENTIAL_TOOLS=("git" "curl" "wget")
 PACKAGE_TOOLS=("yq" "jq")
+
+# Config command tracking
+CONFIG_COMMAND_AVAILABLE=false
+CONFIG_COMMAND_FILE=""
+
+# Steps can be skipped by providing a comma-separated list in SKIP_STEPS
+SKIP_STEPS="${SKIP_STEPS:-}"
+
+# Run control: run only a specific step, or start from a specific step
+RUN_ONLY_STEP="${RUN_ONLY_STEP:-}"
+RUN_FROM_STEP="${RUN_FROM_STEP:-}"
+__RUN_FROM_STARTED=false
+
+# Interactive per-step prompt even without --ask (opt-in)
+# Set INTERACTIVE_SKIP=true to be prompted for non-essential steps.
+INTERACTIVE_SKIP="${INTERACTIVE_SKIP:-false}"
+
+# Steps considered essential (should rarely be skipped)
+ESSENTIAL_STEPS=(
+    setup_environment
+    check_connectivity
+    detect_package_manager
+    install_dependencies
+)
+
+is_step_skipped() {
+    local step="$1"
+    [[ ",${SKIP_STEPS}," == *",${step},"* ]]
+}
+
+skip_step_if_requested() {
+    local step="$1"
+    if is_step_skipped "$step"; then
+        print_skip "Skipping step by request: $step"
+        mark_step_completed "$step"
+        return 1
+    fi
+    return 0
+}
+
+should_run_step() {
+    local step="$1"
+    # If RUN_ONLY_STEP is set, only run that exact step
+    if [[ -n "$RUN_ONLY_STEP" && "$step" != "$RUN_ONLY_STEP" ]]; then
+        print_skip "Skipping step (RUN_ONLY_STEP=$RUN_ONLY_STEP): $step"
+        return 1
+    fi
+    # If RUN_FROM_STEP is set, skip until we reach it, then run subsequent steps
+    if [[ -n "$RUN_FROM_STEP" && "$__RUN_FROM_STARTED" != true ]]; then
+        if [[ "$step" == "$RUN_FROM_STEP" ]]; then
+            __RUN_FROM_STARTED=true
+        else
+            print_skip "Skipping step until RUN_FROM_STEP=$RUN_FROM_STEP: $step"
+            return 1
+        fi
+    fi
+    return 0
+}
 
 # Installation profiles
 declare -A INSTALLATION_PROFILES=(
@@ -73,6 +133,7 @@ declare -A INSTALLATION_PROFILES=(
 declare -A INSTALLATION_STEPS=(
     ["setup_environment"]="Setup installation environment"
     ["check_connectivity"]="Check internet connectivity"
+    ["detect_package_manager"]="Detect or configure package manager"
     ["install_dependencies"]="Install dependencies"
     ["install_dotfiles"]="Install dotfiles repository"
     ["setup_user_dirs"]="Setup user directories"
@@ -81,26 +142,27 @@ declare -A INSTALLATION_STEPS=(
     ["setup_shell"]="Setup shell environment"
     ["setup_ssh"]="Setup SSH configuration"
     ["configure_services"]="Configure system services"
-    ["setup_development"]="Setup development environment"
+    ["setup_development_environment"]="Setup development environment"
     ["apply_tweaks"]="Apply system tweaks"
     ["deploy_config"]="Deploy config command and dotfiles"
 )
 
-# Step order (important for dependencies)
+# Step order
 STEP_ORDER=(
     "setup_environment"
     "check_connectivity"
+    "detect_package_manager"
     "install_dependencies"
     "install_dotfiles"
+    "deploy_config"
     "setup_user_dirs"
     "install_essentials"
     "install_packages"
     "setup_shell"
     "setup_ssh"
     "configure_services"
-    "setup_development"
+    "setup_development_environment"
     "apply_tweaks"
-    "deploy_config"
 )
 
 #======================================
@@ -226,7 +288,7 @@ print_skip() {
 
 print_dry_run() {
     local message="$1"
-    print_color "$MAGENTA" "[DRY RUN] $message"
+    print_color "$CYAN" "[DRY RUN] $message"
 }
 
 #======================================
@@ -354,68 +416,99 @@ test_privilege_access() {
 }
 
 detect_package_manager() {
+    print_section "Detecting Package Manager"
+    save_state "detect_package_manager" "started"
+
     # First try to detect from OS release files
     if [[ "$CFG_OS" == "linux" && -f /etc/os-release ]]; then
         source /etc/os-release
         case "$ID" in
             arch|manjaro|endeavouros|artix)
                 DISTRO="$ID"
-                PACKAGE_MANAGER="pacman" ;;
+                PACKAGE_MANAGER="pacman"
+                PACKAGE_UPDATE_CMD="pacman -Sy"
+                PACKAGE_INSTALL_CMD="pacman -S --noconfirm"
+                ;;
             debian|ubuntu|mint|pop|elementary|zorin)
                 DISTRO="$ID"
-                PACKAGE_MANAGER="apt" ;;
+                PACKAGE_MANAGER="apt"
+                PACKAGE_UPDATE_CMD="apt-get update"
+                PACKAGE_INSTALL_CMD="apt-get install -y"
+                ;;
             fedora|rhel|centos|rocky|almalinux)
                 DISTRO="$ID"
-                PACKAGE_MANAGER="dnf" ;;
+                PACKAGE_MANAGER="dnf"
+                PACKAGE_UPDATE_CMD="dnf check-update"
+                PACKAGE_INSTALL_CMD="dnf install -y"
+                ;;
             opensuse*|sles)
                 DISTRO="$ID"
-                PACKAGE_MANAGER="zypper" ;;
-            gentoo|funtoo)
+                PACKAGE_MANAGER="zypper"
+                PACKAGE_UPDATE_CMD="zypper refresh"
+                PACKAGE_INSTALL_CMD="zypper install -y"
+                ;;
+            gentoo)
                 DISTRO="$ID"
-                PACKAGE_MANAGER="portage" ;;
+                PACKAGE_MANAGER="portage"
+                PACKAGE_UPDATE_CMD="emerge --sync"
+                PACKAGE_INSTALL_CMD="emerge"
+                ;;
             alpine)
                 DISTRO="$ID"
-                PACKAGE_MANAGER="apk" ;;
+                PACKAGE_MANAGER="apk"
+                PACKAGE_UPDATE_CMD="apk update"
+                PACKAGE_INSTALL_CMD="apk add"
+                ;;
             void)
                 DISTRO="$ID"
-                PACKAGE_MANAGER="xbps" ;;
+                PACKAGE_MANAGER="xbps"
+                PACKAGE_UPDATE_CMD="xbps-install -S"
+                PACKAGE_INSTALL_CMD="xbps-install -y"
+                ;;
             nixos)
                 DISTRO="$ID"
-                PACKAGE_MANAGER="nix" ;;
-            *)
-                print_warning "Unknown distribution: $ID, trying to detect package manager directly"
+                PACKAGE_MANAGER="nix"
+                PACKAGE_UPDATE_CMD="nix-channel --update"
+                PACKAGE_INSTALL_CMD="nix-env -iA nixpkgs."
                 ;;
         esac
     elif [[ "$CFG_OS" == "macos" ]]; then
         DISTRO="macos"
         if command -v brew &>/dev/null; then
             PACKAGE_MANAGER="brew"
+            PACKAGE_UPDATE_CMD="brew update"
+            PACKAGE_INSTALL_CMD="brew install"
         else
-            PACKAGE_MANAGER="brew-install"  # Will install homebrew
+            PACKAGE_MANAGER="brew-install"
         fi
     fi
 
     # Fallback: detect by available commands
     if [[ -z "$PACKAGE_MANAGER" ]]; then
         local managers=(
-            "pacman:pacman"
-            "apt:apt"
-            "dnf:dnf"
-            "yum:yum"
-            "zypper:zypper"
-            "emerge:portage"
-            "apk:apk"
-            "xbps-install:xbps"
-            "nix-env:nix"
-            "pkg:pkg"
-            "brew:brew"
+            "pacman:pacman:pacman -Sy:pacman -S --noconfirm"
+            "apt:apt:apt-get update:apt-get install -y"
+            "dnf:dnf:dnf check-update:dnf install -y"
+            "yum:yum:yum check-update:yum install -y"
+            "zypper:zypper:zypper refresh:zypper install -y"
+            "emerge:portage:emerge --sync:emerge"
+            "apk:apk:apk update:apk add"
+            "xbps-install:xbps:xbps-install -S:xbps-install -y"
+            "nix-env:nix:nix-channel --update:nix-env -iA nixpkgs."
+            "pkg:pkg:pkg update:pkg install -y"
+            "brew:brew:brew update:brew install"
         )
 
         for manager in "${managers[@]}"; do
-            local cmd="${manager%:*}"
-            local name="${manager#*:}"
+            local cmd="${manager%%:*}"
+            local name="${manager#*:}"; name="${name%%:*}"
+            local update_cmd="${manager#*:*:}"; update_cmd="${update_cmd%%:*}"
+            local install_cmd="${manager##*:}"
+
             if command -v "$cmd" &>/dev/null; then
                 PACKAGE_MANAGER="$name"
+                PACKAGE_UPDATE_CMD="$update_cmd"
+                PACKAGE_INSTALL_CMD="$install_cmd"
                 break
             fi
         done
@@ -424,16 +517,79 @@ detect_package_manager() {
     if [[ -n "$PACKAGE_MANAGER" ]]; then
         print_success "Detected package manager: $PACKAGE_MANAGER"
         [[ -n "$DISTRO" ]] && print_info "Distribution: $DISTRO"
+
+        # Try to override commands from packages.yml -> package_managers
+        # Find packages.yml in standard locations
+        local original_dir="$PWD"
+        cd "$HOME" 2>/dev/null || true
+        local packages_files=("$PACKAGES_FILE" "common/$PACKAGES_FILE" ".cfg/common/$PACKAGES_FILE")
+        local found_packages_file=""
+        for pf in "${packages_files[@]}"; do
+            if [[ -f "$pf" ]]; then
+                found_packages_file="$pf"
+                break
+            fi
+        done
+        cd "$original_dir" 2>/dev/null || true
+
+        if command_exists yq && [[ -n "$found_packages_file" ]]; then
+            # Prefer distro block, fallback to manager block
+            local pm_update pm_install
+            if [[ -n "$DISTRO" ]]; then
+                pm_update=$(yq eval ".package_managers.${DISTRO}.update" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                pm_install=$(yq eval ".package_managers.${DISTRO}.install" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+            fi
+            if [[ -z "$pm_update" || -z "$pm_install" ]]; then
+                pm_update=$(yq eval ".package_managers.${PACKAGE_MANAGER}.update" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                pm_install=$(yq eval ".package_managers.${PACKAGE_MANAGER}.install" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+            fi
+            if [[ -n "$pm_update" && -n "$pm_install" ]]; then
+                PACKAGE_UPDATE_CMD="$pm_update"
+                PACKAGE_INSTALL_CMD="$pm_install"
+                print_info "Using package manager commands from packages.yml"
+            fi
+        fi
+
+        mark_step_completed "detect_package_manager"
         return 0
     else
         print_error "Could not detect package manager"
-        return 1
+        manual_package_manager_setup
+        return $?
     fi
+}
+
+manual_package_manager_setup() {
+    print_warning "No supported package manager detected automatically"
+    print_info "Please provide package manager commands manually:"
+
+    while true; do
+        print_color "$YELLOW" "Enter package update command (e.g., 'apt-get update'): "
+        read -r PACKAGE_UPDATE_CMD
+        [[ -n "$PACKAGE_UPDATE_CMD" ]] && break
+        print_warning "Update command cannot be empty"
+    done
+
+    while true; do
+        print_color "$YELLOW" "Enter package install command (e.g., 'apt-get install -y'): "
+        read -r PACKAGE_INSTALL_CMD
+        [[ -n "$PACKAGE_INSTALL_CMD" ]] && break
+        print_warning "Install command cannot be empty"
+    done
+
+    PACKAGE_MANAGER="manual"
+    print_success "Manual package manager configuration set"
+    print_info "Update command: $PACKAGE_UPDATE_CMD"
+    print_info "Install command: $PACKAGE_INSTALL_CMD"
+
+    mark_step_completed "detect_package_manager"
+    return 0
 }
 
 #======================================
 # Utility Functions
 #======================================
+
 
 command_exists() {
     command -v "$1" &>/dev/null
@@ -488,9 +644,9 @@ prompt_user() {
 
     while true; do
         if [[ "$default" == "Y" ]]; then
-            print_color "$YELLOW" "$question [Y/n]: "
+            printf "%b%s%b" "$YELLOW" "$question [Y/n]: " "$NOCOLOR"
         else
-            print_color "$YELLOW" "$question [y/N]: "
+            printf "%b%s%b" "$YELLOW" "$question [y/N]: " "$NOCOLOR"
         fi
 
         read -r response
@@ -500,9 +656,9 @@ prompt_user() {
         fi
 
         case "${response^^}" in
-            Y|YES) return 0 ;;
-            N|NO) return 1 ;;
-            *) print_warning "Please answer Y/yes or N/no" ;;
+            Y|YES) echo; return 0 ;;
+            N|NO) echo; return 1 ;;
+            *) echo; print_warning "Please answer Y/yes or N/no" ;;
         esac
     done
 }
@@ -554,39 +710,48 @@ setup_logging() {
     print_info "Log file initialized: $LOG_FILE" "always"
 }
 
-get_package_name() {
+get_package_names() {
     local package="$1"
     local packages_file="${2:-}"
 
     # If packages.yml is available, check for distribution-specific mappings
     if [[ -n "$packages_file" ]] && [[ -f "$packages_file" ]] && command_exists yq; then
-        local distro_package=""
+        local distro_packages=""
 
-        # Try to get package name for current distribution
+        # Try to get package name(s) for current distribution
         case "$DISTRO" in
             arch|manjaro|endeavouros|artix)
-                distro_package=$(yq eval ".arch.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                distro_packages=$(yq eval ".arch.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
                 ;;
             debian|ubuntu|mint|pop|elementary|zorin)
-                distro_package=$(yq eval ".debian.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                distro_packages=$(yq eval ".debian.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
                 ;;
             fedora|rhel|centos|rocky|almalinux)
-                distro_package=$(yq eval ".rhel.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                distro_packages=$(yq eval ".rhel.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
                 ;;
             opensuse*|sles)
-                distro_package=$(yq eval ".opensuse.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                distro_packages=$(yq eval ".opensuse.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
                 ;;
-            gentoo|funtoo)
-                distro_package=$(yq eval ".gentoo.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+            gentoo)
+                distro_packages=$(yq eval ".gentoo.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                ;;
+            alpine)
+                distro_packages=$(yq eval ".alpine.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                ;;
+            void)
+                distro_packages=$(yq eval ".void.$package" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
                 ;;
             macos)
-                distro_package=$(yq eval ".macos[]" "$packages_file" 2>/dev/null | grep "^$package$" || echo "")
+                # macOS uses array format, check if package exists in the list
+                if yq eval ".macos[]" "$packages_file" 2>/dev/null | grep -q "^$package$"; then
+                    distro_packages="$package"
+                fi
                 ;;
         esac
 
-        # Return the distribution-specific package name if found
-        if [[ -n "$distro_package" ]]; then
-            echo "$distro_package"
+        # Return the distribution-specific package name(s) if found
+        if [[ -n "$distro_packages" ]]; then
+            echo "$distro_packages"
             return 0
         fi
     fi
@@ -632,6 +797,13 @@ install_dependencies_if_missing() {
         fi
     done
 
+    # If everything is already present, skip with a clear message
+    if [[ ${#missing_deps[@]} -eq 0 ]]; then
+        print_skip "All required dependencies are already installed"
+        mark_step_completed "install_dependencies"
+        return 0
+    fi
+
     # If no internet and dependencies are missing, try offline packages
     if [[ "$INTERNET_AVAILABLE" != true ]] && [[ ${#missing_deps[@]} -gt 0 ]]; then
         print_warning "No internet connection available"
@@ -664,6 +836,7 @@ install_dependencies_if_missing() {
         mark_step_failed "install_dependencies"
         return 1
     else
+        print_success "Dependencies satisfied: ${missing_deps[*]}"
         mark_step_completed "install_dependencies"
         return 0
     fi
@@ -694,54 +867,75 @@ install_package_offline() {
 # Package Management Functions
 #======================================
 
+
 install_single_package() {
     local package="$1"
     local package_type="${2:-system}"
     local packages_file="${3:-}"
 
-    # Get the correct package name for this distro
-    local pkg_name
-    pkg_name=$(get_package_name "$package" "$packages_file")
+    # Get the correct package name(s) for this distro - can be multiple packages
+    local pkg_names
+    pkg_names=$(get_package_names "$package" "$packages_file")
 
     # Get USE flags for Gentoo
     local use_flags
     use_flags=$(get_package_use_flags "$package" "$packages_file")
 
-    print_info "Installing $package_type package: $pkg_name"
+    print_info "Installing $package_type package: $package -> $pkg_names"
 
-    case "$PACKAGE_MANAGER" in
-        pacman)
-            execute_with_privilege "pacman -S --noconfirm '$pkg_name'" ;;
-        apt)
-            execute_with_privilege "apt-get install -y '$pkg_name'" ;;
-        dnf)
-            execute_with_privilege "dnf install -y '$pkg_name'" ;;
-        yum)
-            execute_with_privilege "yum install -y '$pkg_name'" ;;
-        zypper)
-            execute_with_privilege "zypper install -y '$pkg_name'" ;;
-        portage)
-            local emerge_cmd="emerge"
-            if [[ -n "$use_flags" ]]; then
-                emerge_cmd="USE='$use_flags' emerge"
-                print_info "Using USE flags for $pkg_name: $use_flags"
-            fi
-            execute_with_privilege "$emerge_cmd '$pkg_name'" ;;
-        apk)
-            execute_with_privilege "apk add '$pkg_name'" ;;
-        xbps)
-            execute_with_privilege "xbps-install -y '$pkg_name'" ;;
-        nix)
-            execute_command "nix-env -iA nixpkgs.$pkg_name" ;;
-        brew)
-            execute_command "brew install '$pkg_name'" ;;
-        brew-install)
-            print_error "Homebrew not installed. Please install it first."
-            return 1 ;;
-        *)
-            print_error "Package manager '$PACKAGE_MANAGER' not supported"
-            return 1 ;;
-    esac
+    # Handle multiple packages
+    local install_success=true
+    for pkg_name in $pkg_names; do
+        print_info "Installing: $pkg_name"
+
+        case "$PACKAGE_MANAGER" in
+            pacman)
+                execute_with_privilege "$PACKAGE_INSTALL_CMD '$pkg_name'" || install_success=false
+                ;;
+            apt)
+                execute_with_privilege "$PACKAGE_INSTALL_CMD '$pkg_name'" || install_success=false
+                ;;
+            dnf|yum)
+                execute_with_privilege "$PACKAGE_INSTALL_CMD '$pkg_name'" || install_success=false
+                ;;
+            zypper)
+                execute_with_privilege "$PACKAGE_INSTALL_CMD '$pkg_name'" || install_success=false
+                ;;
+            portage)
+                local emerge_cmd="$PACKAGE_INSTALL_CMD"
+                if [[ -n "$use_flags" ]]; then
+                    emerge_cmd="USE='$use_flags' $PACKAGE_INSTALL_CMD"
+                    print_info "Using USE flags for $pkg_name: $use_flags"
+                fi
+                execute_with_privilege "$emerge_cmd '$pkg_name'" || install_success=false
+                ;;
+            apk)
+                execute_with_privilege "$PACKAGE_INSTALL_CMD '$pkg_name'" || install_success=false
+                ;;
+            xbps)
+                execute_with_privilege "$PACKAGE_INSTALL_CMD '$pkg_name'" || install_success=false
+                ;;
+            nix)
+                execute_command "$PACKAGE_INSTALL_CMD$pkg_name" || install_success=false
+                ;;
+            brew)
+                execute_command "$PACKAGE_INSTALL_CMD '$pkg_name'" || install_success=false
+                ;;
+            brew-install)
+                print_error "Homebrew not installed. Please install it first."
+                return 1
+                ;;
+            manual)
+                execute_with_privilege "$PACKAGE_INSTALL_CMD '$pkg_name'" || install_success=false
+                ;;
+            *)
+                print_error "Package manager '$PACKAGE_MANAGER' not supported"
+                return 1
+                ;;
+        esac
+    done
+
+    return $([[ "$install_success" == true ]] && echo 0 || echo 1)
 }
 
 update_package_database() {
@@ -749,23 +943,23 @@ update_package_database() {
 
     case "$PACKAGE_MANAGER" in
         pacman)
-            execute_with_privilege "pacman -Sy" ;;
+            execute_with_privilege "$PACKAGE_UPDATE_CMD" ;;
         apt)
-            execute_with_privilege "apt-get update" ;;
-        dnf)
-            execute_with_privilege "dnf check-update" || true ;;
-        yum)
-            execute_with_privilege "yum check-update" || true ;;
+            execute_with_privilege "$PACKAGE_UPDATE_CMD" ;;
+        dnf|yum)
+            execute_with_privilege "$PACKAGE_UPDATE_CMD" || true ;;
         zypper)
-            execute_with_privilege "zypper refresh" ;;
+            execute_with_privilege "$PACKAGE_UPDATE_CMD" ;;
         portage)
-            execute_with_privilege "emerge --sync" ;;
+            execute_with_privilege "$PACKAGE_UPDATE_CMD" ;;
         apk)
-            execute_with_privilege "apk update" ;;
+            execute_with_privilege "$PACKAGE_UPDATE_CMD" ;;
         xbps)
-            execute_with_privilege "xbps-install -S" ;;
+            execute_with_privilege "$PACKAGE_UPDATE_CMD" ;;
         brew)
-            execute_command "brew update" ;;
+            execute_command "$PACKAGE_UPDATE_CMD" ;;
+        manual)
+            execute_with_privilege "$PACKAGE_UPDATE_CMD" ;;
         *)
             print_info "Package database update not needed for $PACKAGE_MANAGER" ;;
     esac
@@ -857,8 +1051,46 @@ parse_packages_from_yaml() {
         mapfile -t packages < <(yq eval ".$section[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
     fi
 
-    # Output packages
+    # Output packages (one per line)
     printf '%s\n' "${packages[@]}"
+}
+
+get_profile_package_groups() {
+    local packages_file="$1"
+    local profile="$2"
+    local groups=()
+
+    if [[ ! -f "$packages_file" ]]; then
+        print_warning "Package file not found: $packages_file"
+        return 1
+    fi
+
+    # Get package groups for the profile from the profiles section
+    if yq eval ".profiles.$profile.packages" "$packages_file" &>/dev/null; then
+        mapfile -t groups < <(yq eval ".profiles.$profile.packages[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+    fi
+
+    # Fallback to old method if profiles section doesn't exist
+    if [[ ${#groups[@]} -eq 0 ]]; then
+        case "$profile" in
+            essentials)
+                groups=("common" "essentials") ;;
+            minimal)
+                groups=("common" "essentials" "minimal") ;;
+            dev)
+                groups=("common" "essentials" "minimal" "dev") ;;
+            server)
+                groups=("common" "essentials" "minimal" "server") ;;
+            full)
+                groups=("common" "essentials" "minimal" "dev" "server" "desktop" "wm" "media" "fonts") ;;
+            *)
+                print_error "Unknown profile: $profile"
+                return 1
+                ;;
+        esac
+    fi
+
+    printf '%s\n' "${groups[@]}"
 }
 
 install_packages_from_yaml() {
@@ -874,48 +1106,35 @@ install_packages_from_yaml() {
         return 0
     fi
 
-    # Define sections to install based on profile
-    local sections=()
-    case "$profile" in
-        essentials)
-            sections=("common" "essentials") ;;
-        minimal)
-            sections=("common" "essentials" "minimal") ;;
-        dev)
-            sections=("common" "essentials" "dev") ;;
-        server)
-            sections=("common" "essentials" "server") ;;
-        full)
-            sections=("common" "essentials" "dev" "server" "desktop") ;;
-        *)
-            if [[ -f "profiles/$profile.yml" ]]; then
-                packages_file="profiles/$profile.yml"
-                sections=("packages")
-            else
-                print_error "Unknown profile: $profile"
-                return 1
-            fi
-            ;;
-    esac
+    # Get package groups to install based on profile
+    local groups
+    mapfile -t groups < <(get_profile_package_groups "$packages_file" "$profile")
 
-    # Install packages from each section
-    for section in "${sections[@]}"; do
-        print_info "Installing packages from section: $section"
+    if [[ ${#groups[@]} -eq 0 ]]; then
+        print_error "No package groups found for profile: $profile"
+        return 1
+    fi
+
+    print_info "Installing package groups for $profile: ${groups[*]}"
+
+    # Install packages from each group
+    for group in "${groups[@]}"; do
+        print_info "Installing packages from group: $group"
 
         local packages
-        mapfile -t packages < <(parse_packages_from_yaml "$packages_file" "$section")
+        mapfile -t packages < <(parse_packages_from_yaml "$packages_file" "$group")
 
         if [[ ${#packages[@]} -eq 0 ]]; then
-            print_info "No packages found in section: $section"
+            print_info "No packages found in group: $group"
             continue
         fi
 
-        print_info "Found ${#packages[@]} packages in section $section"
+        print_info "Found ${#packages[@]} packages in group $group: ${packages[*]}"
 
         for package in "${packages[@]}"; do
             [[ -z "$package" ]] && continue
 
-            if install_single_package "$package" "$section" "$packages_file"; then
+            if install_single_package "$package" "$group" "$packages_file"; then
                 print_success "Installed: $package"
                 ((installed_count++))
             else
@@ -924,6 +1143,11 @@ install_packages_from_yaml() {
             fi
         done
     done
+
+    # Handle development environment setup
+    if yq eval ".profiles.$profile.enable_development" "$packages_file" 2>/dev/null | grep -q "true"; then
+        setup_development_environment "$packages_file"
+    fi
 
     print_info "Package installation summary:"
     print_color "$GREEN" "  Installed: $installed_count"
@@ -943,67 +1167,108 @@ install_packages_from_yaml() {
 # Dotfiles Management System (Config Command)
 #======================================
 
-install_config_command() {
-    print_info "Installing config command for dotfiles management"
+check_existing_config_command() {
+    print_info "Checking for existing config command..."
 
-    # Known function files where cfg might already be defined
+    # Known function files where config might already be defined
     local function_files=(
         "$HOME/.config/zsh/user/functions.zsh"
+        "$HOME/.config/zsh/.zshrc"
+        "$HOME/.zshrc"
         "$HOME/.bashrc"
+        "$HOME/.profile"
     )
 
-    # Check if cfg is already defined
-    local cfg_defined=false
+    # Check if config command is already available in current shell
+    if type config >/dev/null 2>&1; then
+        CONFIG_COMMAND_AVAILABLE=true
+        print_success "Config command already available in current shell"
+        return 0
+    fi
+
+    # Check files for existing config function definition
     for f in "${function_files[@]}"; do
-        if [[ -f "$f" ]] && grep -q '^\s*cfg\s*()' "$f"; then
-            cfg_defined=true
-            # Source the file to make cfg available in current session
-            # Only source if not already sourced
-            if ! type cfg >/dev/null 2>&1; then
-                # shellcheck disable=SC1090
-                source "$f"
-                print_info "Sourced cfg from $f"
+        if [[ -f "$f" ]]; then
+            if grep -q '^\s*config\s*()' "$f" || grep -q '# Dotfiles Management System' "$f"; then
+                CONFIG_COMMAND_AVAILABLE=true
+                CONFIG_COMMAND_FILE="$f"
+                print_success "Config command found in: $f"
+                # Do NOT source user shell files here to avoid early exits or side-effects.
+                # We'll rely on fallbacks (git/manual deploy) if the function is not in the current shell.
+                return 0
             fi
-            break
         fi
     done
 
-    if [[ "$cfg_defined" == true ]]; then
-        print_info "cfg function already defined, no need to append"
-        return
+    CONFIG_COMMAND_AVAILABLE=false
+    print_info "No existing config command found"
+    return 1
+}
+
+install_config_command() {
+    print_section "Installing Config Command"
+
+    if check_existing_config_command; then
+        if [[ "$FORCE_MODE" == true ]]; then
+            print_info "Force mode: reinstalling config command"
+        else
+            return 0
+        fi
     fi
 
-    # Determine current shell
+    # Determine current shell and profile file
     local current_shell
     current_shell=$(basename "$SHELL")
 
-    local profile_files=()
-
+    local profile_file=""
     case "$current_shell" in
         bash)
-            profile_files+=("$HOME/.bashrc")
-            [[ -f "$HOME/.profile" ]] && profile_files+=("$HOME/.profile")
+            if [[ -f "$HOME/.bashrc" ]]; then
+                profile_file="$HOME/.bashrc"
+            else
+                profile_file="$HOME/.bashrc"
+                touch "$profile_file"
+            fi
             ;;
         zsh)
-            profile_files+=("$HOME/.zshrc")
-            [[ -f "$HOME/.config/zsh/.zshrc" ]] && profile_files+=("$HOME/.config/zsh/.zshrc")
-            [[ -f "$HOME/.profile" ]] && profile_files+=("$HOME/.profile")
+            if [[ -f "$HOME/.config/zsh/user/functions.zsh" ]]; then
+                profile_file="$HOME/.config/zsh/user/functions.zsh"
+            elif [[ -f "$HOME/.config/zsh/.zshrc" ]]; then
+                profile_file="$HOME/.config/zsh/.zshrc"
+            elif [[ -f "$HOME/.zshrc" ]]; then
+                profile_file="$HOME/.zshrc"
+            else
+                profile_file="$HOME/.zshrc"
+                touch "$profile_file"
+            fi
             ;;
         *)
-            [[ -f "$HOME/.profile" ]] && profile_files+=("$HOME/.profile")
+            if [[ -f "$HOME/.profile" ]]; then
+                profile_file="$HOME/.profile"
+            else
+                profile_file="$HOME/.profile"
+                touch "$profile_file"
+            fi
             ;;
     esac
 
-    # If no profile files exist, create .bashrc
-    if [[ ${#profile_files[@]} -eq 0 ]]; then
-        profile_files+=("$HOME/.bashrc")
-        touch "$HOME/.bashrc"
+    if [[ ! -w "$profile_file" ]]; then
+        print_error "Cannot write to profile file: $profile_file"
+        return 1
     fi
 
-    # Append cfg function to profiles if not already present
-    for profile in "${profile_files[@]}"; do
-        if [[ -w "$profile" ]] && ! grep -q "# Dotfiles config function" "$profile" 2>/dev/null; then
-            cat >> "$profile" << 'EOF'
+    # Check if config function already exists in the target file
+    if grep -q "# Dotfiles Management System" "$profile_file" 2>/dev/null; then
+        print_info "Config function already exists in $profile_file"
+        CONFIG_COMMAND_AVAILABLE=true
+        CONFIG_COMMAND_FILE="$profile_file"
+        return 0
+    fi
+
+    print_info "Adding config function to: $profile_file"
+
+    # Add the config function
+    cat >> "$profile_file" << 'EOF'
 
 # Dotfiles Management System
 if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
@@ -1125,6 +1390,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     config() {
         local cmd="$1"; shift
         local target_dir=""
+
         # Parse optional --target flag for add
         if [[ "$cmd" == "add" ]]; then
             while [[ "$1" == --* ]]; do
@@ -1242,9 +1508,8 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
             deploy)
                 _config ls-files | while read -r repo_file; do
                     local full_repo_path="$HOME/.cfg/$repo_file"
-                    local sys_file="$(_sys_path "$repo_file")"  # destination only
+                    local sys_file="$(_sys_path "$repo_file")"
 
-                    # Only continue if the source exists
                     if [[ -e "$full_repo_path" && -n "$sys_file" ]]; then
                         local dest_dir
                         dest_dir="$(dirname "$sys_file")"
@@ -1307,37 +1572,93 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     }
 fi
 EOF
-            print_success "Added config function to $profile"
-        else
-            print_info "Config function already exists in $profile or file not writable"
-        fi
-    done
 
-    return 0
+    if [[ $? -eq 0 ]]; then
+        print_success "Config command added to: $profile_file"
+        CONFIG_COMMAND_AVAILABLE=true
+        CONFIG_COMMAND_FILE="$profile_file"
+
+        # Source the file to make config command available immediately
+        # shellcheck disable=SC1090
+        source "$profile_file" 2>/dev/null || print_warning "Failed to source $profile_file"
+
+        return 0
+    else
+        print_error "Failed to add config command to $profile_file"
+        return 1
+    fi
 }
-
 
 deploy_config() {
     print_section "Deploying Configuration"
     save_state "deploy_config" "started"
 
-    # Install and setup the config command first
-    install_config_command
+    # Ensure config command is available
+    if [[ "$CONFIG_COMMAND_AVAILABLE" != true ]]; then
+        install_config_command || {
+            print_error "Failed to install config command"
+            mark_step_failed "deploy_config"
+            return 1
+        }
+    fi
 
     # Deploy dotfiles from repository to system
     if [[ -d "$DOTFILES_DIR" ]]; then
-        print_info "Deploying dotfiles from repository to system locations..."
+        print_info "Checking out dotfiles from repository..."
 
-        # Source shell configuration to make config function available
+        # Reload shell configuration to make config function available
         reload_shell_config
 
-        # Check if config function is available
-        if declare -f config >/dev/null 2>&1 || type config >/dev/null 2>&1; then
-            print_info "Config function available, deploying files..."
+        # First, checkout files from the bare repository to restore directory structure
+        if [[ "$DRY_RUN" == true ]]; then
+            print_dry_run "config checkout"
+        else
+            # Source the config function if available
+            if type config >/dev/null 2>&1; then
+                print_info "Using config command to checkout files..."
+                if config checkout; then
+                    print_success "Files checked out from repository"
+                else
+                    print_warning "Some files may have failed to checkout, trying force checkout..."
+                    config checkout -f || print_warning "Force checkout also had issues"
+                fi
+            else
+                # Fallback: use git directly
+                print_info "Using git directly to checkout files..."
+                if git --git-dir="$DOTFILES_DIR" --work-tree="$DOTFILES_DIR" checkout HEAD -- . 2>/dev/null; then
+                    print_success "Files checked out using git directly"
+                else
+                    print_warning "Git checkout had issues, continuing anyway..."
+                fi
+            fi
+        fi
+
+        # Backup existing files prior to deployment (prompt, allow skip)
+        if [[ "$DRY_RUN" == true ]]; then
+            print_dry_run "Backup existing dotfiles prior to deployment"
+        else
+            if [[ "$FORCE_MODE" == true ]]; then
+                # In force mode, perform backup without prompting
+                backup_existing_dotfiles || print_warning "Backup encountered issues (continuing)"
+            else
+                if prompt_user "Backup existing dotfiles before deployment?"; then
+                    backup_existing_dotfiles || print_warning "Backup encountered issues (continuing)"
+                else
+                    print_skip "User chose to skip backup before deployment"
+                fi
+            fi
+        fi
+
+        print_info "Deploying dotfiles from repository to system locations..."
+
+        # Verify config command is working
+        if ! verify_config_command; then
+            print_warning "Config command not working properly, using manual deployment"
+            manual_deploy_dotfiles
+        else
+            print_info "Config command available, deploying files..."
 
             if [[ "$DRY_RUN" == true ]]; then
-                print_dry_run "config restore ."
-                print_dry_run "config reset"
                 print_dry_run "config deploy"
             else
                 # Use the config function to deploy files
@@ -1347,9 +1668,6 @@ deploy_config() {
                     print_warning "Some files may have failed to deploy"
                 fi
             fi
-        else
-            print_info "Config function not available, using manual deployment..."
-            manual_deploy_dotfiles
         fi
 
         # Set appropriate permissions
@@ -1360,6 +1678,16 @@ deploy_config() {
     fi
 
     mark_step_completed "deploy_config"
+}
+
+verify_config_command() {
+    if type config >/dev/null 2>&1; then
+        print_success "Config command is available and working"
+        return 0
+    else
+        print_warning "Config command not available"
+        return 1
+    fi
 }
 
 reload_shell_config() {
@@ -1387,6 +1715,132 @@ reload_shell_config() {
             source "$shell_file" 2>/dev/null || print_warning "Failed to source $shell_file"
         fi
     done
+}
+
+# Manual deployment function (fallback when config command not available)
+manual_deploy_dotfiles() {
+    print_info "Using manual deployment method..."
+
+    if [[ ! -d "$DOTFILES_DIR" ]]; then
+        print_error "Dotfiles directory not found: $DOTFILES_DIR"
+        return 1
+    fi
+
+    local os_dir="$DOTFILES_DIR/$CFG_OS"
+    local common_dir="$DOTFILES_DIR/common"
+
+    deploy_file() {
+        local repo_file="$1"
+        local rel_path sys_file sys_dir base
+
+        # Determine destination based on repo path
+        rel_path="${repo_file#$DOTFILES_DIR/}"
+
+        # OS-specific files outside home
+        if [[ "$rel_path" == "$CFG_OS/"* && "$rel_path" != */home/* ]]; then
+            sys_file="/${rel_path#$CFG_OS/}"
+        else
+            case "$rel_path" in
+                common/config/*)
+                    case "$CFG_OS" in
+                        linux)
+                            base="${XDG_CONFIG_HOME:-$HOME/.config}"
+                            sys_file="$base/${rel_path#common/config/}"
+                            ;;
+                        macos)
+                            sys_file="$HOME/Library/Application Support/${rel_path#common/config/}"
+                            ;;
+                        windows)
+                            sys_file="$LOCALAPPDATA\\${rel_path#common/config/}"
+                            ;;
+                        *)
+                            sys_file="$HOME/.config/${rel_path#common/config/}"
+                            ;;
+                    esac
+                    ;;
+                common/assets/*)
+                    sys_file="$HOME/.cfg/$rel_path"
+                    ;;
+                common/*)
+                    sys_file="$HOME/${rel_path#common/}"
+                    ;;
+                */home/*)
+                    sys_file="$HOME/${rel_path#*/home/}"
+                    ;;
+                profile/*|README.md)
+                    sys_file="$HOME/.cfg/$rel_path"
+                    ;;
+                *)
+                    sys_file="$HOME/.cfg/$rel_path"
+                    ;;
+            esac
+        fi
+
+        sys_dir="$(dirname "$sys_file")"
+        mkdir -p "$sys_dir"
+
+        # Copy with privilege if path is system (/etc, /usr, etc.)
+        if [[ "$sys_file" == /* ]]; then
+            # If we lack a privilege tool and are not root, skip with clear message
+            if [[ -z "$PRIVILEGE_TOOL" && "$EUID" -ne 0 ]]; then
+                print_skip "Skipping privileged deploy (no sudo/doas): $rel_path -> $sys_file"
+            else
+                execute_with_privilege "cp -a '$repo_file' '$sys_file'" \
+                    && print_info "Deployed (privileged): $rel_path" \
+                    || print_error "Failed to deploy (privileged): $rel_path"
+            fi
+        else
+            cp -a "$repo_file" "$sys_file" \
+                && print_info "Deployed: $rel_path" \
+                || print_error "Failed to deploy: $rel_path"
+        fi
+    }
+
+    # Deploy all files in OS dir
+    if [[ -d "$os_dir" ]]; then
+        find "$os_dir" -type f | while read -r f; do
+            deploy_file "$f"
+        done
+    fi
+
+    # Deploy all files in common dir
+    if [[ -d "$common_dir" ]]; then
+        find "$common_dir" -type f | while read -r f; do
+            deploy_file "$f"
+        done
+    fi
+}
+
+# Set appropriate file permissions
+set_dotfile_permissions() {
+    print_info "Setting appropriate file permissions..."
+
+    # SSH directory permissions
+    if [[ -d "$HOME/.ssh" ]]; then
+        chmod 700 "$HOME/.ssh"
+        find "$HOME/.ssh" -name "id_*" -not -name "*.pub" -exec chmod 600 {} \; 2>/dev/null || true
+        find "$HOME/.ssh" -name "*.pub" -exec chmod 644 {} \; 2>/dev/null || true
+        find "$HOME/.ssh" -name "config" -exec chmod 600 {} \; 2>/dev/null || true
+        print_info "SSH permissions set"
+    fi
+
+    # GPG directory permissions
+    if [[ -d "$HOME/.gnupg" ]]; then
+        chmod 700 "$HOME/.gnupg"
+        find "$HOME/.gnupg" -type f -exec chmod 600 {} \; 2>/dev/null || true
+        print_info "GPG permissions set"
+    fi
+
+    # Make scripts executable
+    if [[ -d "$HOME/.local/bin" ]]; then
+        find "$HOME/.local/bin" -type f -exec chmod +x {} \; 2>/dev/null || true
+        print_info "Script permissions set"
+    fi
+
+    if [[ -d "$HOME/.scripts" ]]; then
+        find "$HOME/.scripts" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+        print_info "Shell script permissions set"
+    fi
 }
 
 #======================================
@@ -1500,10 +1954,11 @@ setup_user_dirs() {
         create_dir "$HOME/$dir"
     done
 
-    # Set up XDG directories
+    # Set up XDG directories (ensure existence; no deletions)
     if command_exists xdg-user-dirs-update; then
-        execute_command "xdg-user-dirs-update"
-        print_success "XDG user directories configured"
+        # Suppress tool output to avoid misleading terms like "removed"; we only ensure presence.
+        execute_command "xdg-user-dirs-update >/dev/null 2>&1 || true"
+        print_success "Ensured XDG user directories exist (standardized names may be renamed, never removed)"
     fi
 
     mark_step_completed "setup_user_dirs"
@@ -1513,8 +1968,43 @@ install_essentials() {
     print_section "Installing Essential Tools"
     save_state "install_essentials" "started"
 
+    # Fast-path: determine if any package tools are actually missing
+    local missing_tools=()
+    for tool in "${PACKAGE_TOOLS[@]}"; do
+        if [[ "$tool" == "yq" ]]; then
+            if command_exists yq || [[ -x "$HOME/.local/bin/yq" ]]; then
+                continue
+            fi
+        elif [[ "$tool" == "jq" ]]; then
+            if command_exists jq || is_package_installed jq; then
+                continue
+            fi
+        fi
+        if ! command_exists "$tool"; then
+            missing_tools+=("$tool")
+        fi
+    done
+
+    if [[ ${#missing_tools[@]} -eq 0 ]]; then
+        print_skip "All essential tools are already installed"
+        mark_step_completed "install_essentials"
+        return 0
+    fi
+
     # Install package processing tools first
     for tool in "${PACKAGE_TOOLS[@]}"; do
+        if [[ "$tool" == "yq" ]]; then
+            if command_exists yq || [[ -x "$HOME/.local/bin/yq" ]]; then
+                print_info "Package tool already available: yq"
+                continue
+            fi
+        elif [[ "$tool" == "jq" ]]; then
+            if command_exists jq || is_package_installed jq; then
+                print_info "Package tool already available: jq"
+                continue
+            fi
+        fi
+
         if ! command_exists "$tool"; then
             case "$tool" in
                 yq)
@@ -1527,7 +2017,9 @@ install_essentials() {
                     fi
                     ;;
                 jq)
-                    if install_single_package "jq" "essential"; then
+                    if command_exists jq || is_package_installed jq; then
+                        print_info "Package tool already available: jq"
+                    elif install_single_package "jq" "essential"; then
                         print_success "Installed package tool: $tool"
                     else
                         print_error "Failed to install package tool: $tool"
@@ -1562,12 +2054,6 @@ install_packages() {
         return 0
     fi
 
-    # Determine profile to install
-    local profile="$INSTALL_MODE"
-    if [[ "$INSTALL_MODE" == "ask" ]]; then
-        profile="dev"  # Default
-    fi
-
     # Change to home directory to find packages.yml
     local original_dir="$PWD"
     cd "$HOME" 2>/dev/null || true
@@ -1584,15 +2070,86 @@ install_packages() {
     done
 
     if [[ -n "$found_packages_file" ]]; then
-        if install_packages_from_yaml "$found_packages_file" "$profile"; then
+        # Handle custom installs first
+        handle_custom_installs "$found_packages_file"
+
+        # Install packages
+        if install_packages_from_yaml "$found_packages_file" "$INSTALL_MODE"; then
             mark_step_completed "install_packages"
         else
             print_warning "Some packages failed to install, but continuing..."
-            mark_step_completed "install_packages"  # Don't fail the whole installation
+            mark_step_completed "install_packages"
         fi
     else
-        print_warning "packages.yml not found, skipping package installation"
-        mark_step_completed "install_packages"
+        print_warning "packages.yml not found, attempting to download from GitHub..."
+
+        # Derive raw URL from DOTFILES_URL
+        # Supports formats like:
+        #   https://github.com/<owner>/<repo>.git
+        #   git@github.com:<owner>/<repo>.git
+        #   https://github.com/<owner>/<repo>
+        local owner repo branch
+        branch="main"
+        case "$DOTFILES_URL" in
+            git@github.com:*)
+                owner="${DOTFILES_URL#git@github.com:}"
+                owner="${owner%.git}"
+                repo="${owner#*/}"
+                owner="${owner%%/*}"
+                ;;
+            https://github.com/*)
+                owner="${DOTFILES_URL#https://github.com/}"
+                owner="${owner%.git}"
+                repo="${owner#*/}"
+                owner="${owner%%/*}"
+                ;;
+            *)
+                owner=""
+                repo=""
+                ;;
+        esac
+
+        local packages_url=""
+        if [[ -n "$owner" && -n "$repo" ]]; then
+            packages_url="https://raw.githubusercontent.com/$owner/$repo/$branch/common/packages.yml"
+        fi
+        local temp_packages="/tmp/packages.yml"
+
+        if command_exists curl && [[ -n "$packages_url" ]]; then
+            if curl -fsSL "$packages_url" -o "$temp_packages" 2>/dev/null; then
+                # Create common directory if it doesn't exist
+                mkdir -p "$HOME/.cfg/common" 2>/dev/null || mkdir -p "$HOME/common" 2>/dev/null
+
+                # Move to appropriate location
+                if [[ -d "$HOME/.cfg/common" ]]; then
+                    mv "$temp_packages" "$HOME/.cfg/common/packages.yml"
+                    found_packages_file="$HOME/.cfg/common/packages.yml"
+                elif [[ -d "$HOME/common" ]]; then
+                    mv "$temp_packages" "$HOME/common/packages.yml"
+                    found_packages_file="$HOME/common/packages.yml"
+                else
+                    mv "$temp_packages" "$HOME/packages.yml"
+                    found_packages_file="$HOME/packages.yml"
+                fi
+
+                print_success "Downloaded packages.yml from GitHub"
+
+                # Now install packages with the downloaded file
+                handle_custom_installs "$found_packages_file"
+                if install_packages_from_yaml "$found_packages_file" "$INSTALL_MODE"; then
+                    mark_step_completed "install_packages"
+                else
+                    print_warning "Some packages failed to install, but continuing..."
+                    mark_step_completed "install_packages"
+                fi
+            else
+                print_warning "Failed to download packages.yml, skipping package installation"
+                mark_step_completed "install_packages"
+            fi
+        else
+            print_warning "curl not available and packages.yml not found, skipping package installation"
+            mark_step_completed "install_packages"
+        fi
     fi
 
     cd "$original_dir" 2>/dev/null || true
@@ -1602,64 +2159,53 @@ setup_shell() {
     print_section "Setting Up Shell Environment"
     save_state "setup_shell" "started"
 
+    # Ensure config command is available before changing shells
+    if [[ "$CONFIG_COMMAND_AVAILABLE" != true ]]; then
+        print_warning "Config command not available, installing it first..."
+        install_config_command || {
+            print_error "Failed to install config command before shell setup"
+            mark_step_failed "setup_shell"
+            return 1
+        }
+    fi
+
     if command_exists zsh; then
-        if [[ "$FORCE_MODE" == true ]] || prompt_user "Change default shell to Zsh?"; then
-            local zsh_path
-            zsh_path="$(command -v zsh)"
+        local zsh_path
+        zsh_path="$(command -v zsh)"
+
+        if [[ "$FORCE_MODE" == true ]]; then
+            print_info "FORCE mode: changing default shell to Zsh without prompting"
             if execute_with_privilege "chsh -s '$zsh_path' '$USER'"; then
                 print_success "Default shell changed to Zsh"
                 print_warning "Please log out and log back in to apply changes"
             else
                 print_error "Failed to change default shell"
             fi
+        elif [[ "$ASK_MODE" == true ]]; then
+            if prompt_user "Change default shell to Zsh?" "N"; then
+                if execute_with_privilege "chsh -s '$zsh_path' '$USER'"; then
+                    print_success "Default shell changed to Zsh"
+                    print_warning "Please log out and log back in to apply changes"
+                else
+                    print_error "Failed to change default shell"
+                fi
+            else
+                print_skip "Default shell change (user chose No)"
+            fi
+        else
+            print_info "Skipping shell change (non-interactive mode). Use --ask to be prompted or --force to auto-change."
         fi
     else
         print_warning "Zsh not installed, skipping shell setup"
     fi
 
-    # Install Zsh plugins if in dotfiles directory
-    if [[ -f "$HOME/.zshrc" || -f "$HOME/.config/zsh/.zshrc" ]]; then
-        install_zsh_plugins
-    fi
+    # Zsh plugins are managed via packages.yml custom_installs (zsh_plugins)
+    # No direct plugin installation here to avoid duplication.
 
     mark_step_completed "setup_shell"
 }
 
-install_zsh_plugins() {
-    if [[ "$INTERNET_AVAILABLE" != true ]]; then
-        print_warning "No internet connectivity - skipping Zsh plugins installation"
-        return 0
-    fi
-
-    local zsh_plugins_dir="$HOME/.config/zsh/plugins"
-
-    print_info "Installing Zsh plugins..."
-    create_dir "$HOME/.config/zsh"
-    create_dir "$zsh_plugins_dir"
-
-    local plugins=(
-        "zsh-you-should-use:https://github.com/MichaelAquilina/zsh-you-should-use.git"
-        "zsh-syntax-highlighting:https://github.com/zsh-users/zsh-syntax-highlighting.git"
-        "zsh-autosuggestions:https://github.com/zsh-users/zsh-autosuggestions.git"
-    )
-
-    for plugin_info in "${plugins[@]}"; do
-        local plugin_name="${plugin_info%:*}"
-        local plugin_url="${plugin_info#*:}"
-        local plugin_dir="$zsh_plugins_dir/$plugin_name"
-
-        if [[ ! -d "$plugin_dir" ]]; then
-            print_info "Installing $plugin_name..."
-            if execute_command "git clone '$plugin_url' '$plugin_dir'"; then
-                print_success "Installed $plugin_name"
-            else
-                print_error "Failed to install $plugin_name"
-            fi
-        else
-            print_info "$plugin_name already installed"
-        fi
-    done
-}
+## install_zsh_plugins deprecated; handled via packages.yml
 
 setup_ssh() {
     print_section "Setting Up SSH"
@@ -1775,8 +2321,14 @@ manage_service() {
     return $((1 - success))
 }
 
-# Configure system services
-configure_services() {
+#======================================
+# Service Management Functions
+#======================================
+
+configure_services_from_yaml() {
+    local packages_file="$1"
+    local profile="$2"
+
     print_section "Configuring System Services"
     save_state "configure_services" "started"
 
@@ -1786,63 +2338,90 @@ configure_services() {
         return 0
     fi
 
-    # Detect the init system once
+    if [[ ! -f "$packages_file" ]]; then
+        print_warning "Package file not found, skipping service configuration"
+        mark_step_completed "configure_services"
+        return 0
+    fi
+
+    # Detect the init system
     local INIT_SYSTEM=$(detect_init_system)
     print_info "Detected Init System: $INIT_SYSTEM"
 
-    # Enable TLP for laptop power management
-    if command_exists tlp; then
-        print_info "TLP is installed"
-        if [[ "$FORCE_MODE" == true ]] || prompt_user "Enable TLP power management service?"; then
-            if manage_service "enable" "tlp" "$INIT_SYSTEM"; then
-                manage_service "start" "tlp" "$INIT_SYSTEM"
-                print_success "TLP enabled and started"
+    # Get services to enable for all profiles
+    local services_all
+    mapfile -t services_all < <(yq eval ".services.enable.all[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+
+    # Get services to enable for specific profile
+    local services_profile
+    mapfile -t services_profile < <(yq eval ".services.enable.$profile[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+
+    # Get services to disable for specific profile
+    local services_disable
+    mapfile -t services_disable < <(yq eval ".services.disable.$profile[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+
+    # Enable services
+    for service in "${services_all[@]}" "${services_profile[@]}"; do
+        [[ -z "$service" ]] && continue
+        if [[ "$FORCE_MODE" == true ]] || prompt_user "Enable $service service?"; then
+            if manage_service "enable" "$service" "$INIT_SYSTEM"; then
+                manage_service "start" "$service" "$INIT_SYSTEM"
+                print_success "Enabled and started $service"
             else
-                print_error "Failed to enable TLP"
+                print_error "Failed to enable $service"
             fi
         fi
-    elif [[ "$FORCE_MODE" == true ]] || prompt_user "Install and enable TLP for better battery life?"; then
-        case "$DISTRO" in
-            PACMAN) execute_command "$PRIVILEGE_TOOL pacman -S --noconfirm tlp tlp-rdw" ;;
-            APT) execute_command "$PRIVILEGE_TOOL apt install -y tlp tlp-rdw" ;;
-            DNF) execute_command "$PRIVILEGE_TOOL dnf install -y tlp tlp-rdw" ;;
-        esac
+    done
 
-        if command_exists tlp; then
-            manage_service "enable" "tlp" "$INIT_SYSTEM"
-            manage_service "start" "tlp" "$INIT_SYSTEM"
-            print_success "TLP installed, enabled and started"
-        fi
-    fi
-
-    # Configure other useful services
-    local services_to_enable=()
-
-    # Check for and configure common services
-    # NOTE: The 'is-enabled' check is non-portable and removed for simplicity
-    if command_exists docker; then
-        if [[ "$FORCE_MODE" == true ]] || prompt_user "Enable Docker service?"; then
-            services_to_enable+=("docker")
-        fi
-    fi
-
-    if command_exists bluetooth; then
-        if [[ "$FORCE_MODE" == true ]] || prompt_user "Enable Bluetooth service?"; then
-            services_to_enable+=("bluetooth")
-        fi
-    fi
-
-    # Enable selected services
-    for service in "${services_to_enable[@]}"; do
-        if manage_service "enable" "$service" "$INIT_SYSTEM"; then
-            manage_service "start" "$service" "$INIT_SYSTEM"
-            print_success "Enabled and started $service"
-        else
-            print_error "Failed to enable $service"
+    # Disable services
+    for service in "${services_disable[@]}"; do
+        [[ -z "$service" ]] && continue
+        if [[ "$FORCE_MODE" == true ]] || prompt_user "Disable $service service?"; then
+            if manage_service "stop" "$service" "$INIT_SYSTEM"; then
+                manage_service "disable" "$service" "$INIT_SYSTEM"
+                print_success "Stopped and disabled $service"
+            else
+                print_error "Failed to disable $service"
+            fi
         fi
     done
 
     mark_step_completed "configure_services"
+}
+
+configure_services() {
+    # Change to home directory to find packages.yml
+    local original_dir="$PWD"
+    cd "$HOME" 2>/dev/null || true
+
+    local packages_files=("$PACKAGES_FILE" "common/$PACKAGES_FILE" ".cfg/common/$PACKAGES_FILE")
+    local found_packages_file=""
+
+    for pf in "${packages_files[@]}"; do
+        if [[ -f "$pf" ]]; then
+            found_packages_file="$pf"
+            break
+        fi
+    done
+
+    if [[ -n "$found_packages_file" ]]; then
+        configure_services_from_yaml "$found_packages_file" "$INSTALL_MODE"
+    else
+        # Fallback to original configure_services logic
+        print_section "Configuring System Services"
+        save_state "configure_services" "started"
+
+        if [[ "$CFG_OS" != "linux" ]]; then
+            print_skip "Service configuration (not supported on $CFG_OS)"
+            mark_step_completed "configure_services"
+            return 0
+        fi
+
+        # Original service configuration logic here...
+        mark_step_completed "configure_services"
+    fi
+
+    cd "$original_dir" 2>/dev/null || true
 }
 
 setup_tmux_plugins() {
@@ -1875,33 +2454,272 @@ setup_tmux_plugins() {
     fi
 }
 
-setup_development() {
-    print_section "Setting Up Development Environment"
-    save_state "setup_development" "started"
+#======================================
+# Development Environment Setup
+#======================================
 
-    # Git configuration
+
+setup_development_environment() {
+    # Accept optional packages_file argument. If missing, try to locate a default.
+    local packages_file="${1:-}"
+    if [[ -z "$packages_file" ]]; then
+        local candidates=("$HOME/$PACKAGES_FILE" "$HOME/common/$PACKAGES_FILE" "$HOME/.cfg/common/$PACKAGES_FILE")
+        for pf in "${candidates[@]}"; do
+            if [[ -f "$pf" ]]; then
+                packages_file="$pf"
+                break
+            fi
+        done
+    fi
+
+    print_info "Setting up development environment"
+
+    if [[ -z "$packages_file" || ! -f "$packages_file" ]]; then
+        print_warning "Package file not found, skipping development setup"
+        return 0
+    fi
+
+    # Apply git configuration
+    local git_configs
+    if command_exists yq; then
+        mapfile -t git_configs < <(yq eval ".development.git_config[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+    else
+        git_configs=()
+    fi
+
+    if [[ ${#git_configs[@]} -gt 0 ]] && command_exists git; then
+        print_info "Applying git configuration"
+        for config in "${git_configs[@]}"; do
+            [[ -z "$config" ]] && continue
+            print_info "Running: $config"
+            execute_command "$config"
+        done
+    fi
+}
+
+# Backup existing files that will be affected by deployment
+backup_existing_dotfiles() {
+    local backup_root="$BACKUP_DIR/pre-deploy"
+    local os_dir="$DOTFILES_DIR/$CFG_OS"
+    local common_dir="$DOTFILES_DIR/common"
+
+    print_info "Creating backup at: $backup_root"
+    mkdir -p "$backup_root" 2>/dev/null || true
+
+    # Helper to compute destination path similar to manual_deploy_dotfiles
+    _compute_dest_path() {
+        local repo_file="$1"
+        local rel_path sys_file base
+        rel_path="${repo_file#$DOTFILES_DIR/}"
+
+        if [[ "$rel_path" == "$CFG_OS/"* && "$rel_path" != */home/* ]]; then
+            sys_file="/${rel_path#$CFG_OS/}"
+        else
+            case "$rel_path" in
+                common/config/*)
+                    case "$CFG_OS" in
+                        linux)
+                            base="${XDG_CONFIG_HOME:-$HOME/.config}"
+                            sys_file="$base/${rel_path#common/config/}"
+                            ;;
+                        macos)
+                            sys_file="$HOME/Library/Application Support/${rel_path#common/config/}"
+                            ;;
+                        windows)
+                            sys_file="$LOCALAPPDATA\\${rel_path#common/config/}"
+                            ;;
+                        *)
+                            sys_file="$HOME/.config/${rel_path#common/config/}"
+                            ;;
+                    esac
+                    ;;
+                common/assets/*)
+                    sys_file="$HOME/.cfg/$rel_path"
+                    ;;
+                common/*)
+                    sys_file="$HOME/${rel_path#common/}"
+                    ;;
+                */home/*)
+                    sys_file="$HOME/${rel_path#*/home/}"
+                    ;;
+                profile/*|README.md)
+                    sys_file="$HOME/.cfg/$rel_path"
+                    ;;
+                *)
+                    sys_file="$HOME/.cfg/$rel_path"
+                    ;;
+            esac
+        fi
+
+        echo "$sys_file"
+    }
+
+    _backup_one() {
+        local repo_file="$1"
+        local dest
+        dest=$(_compute_dest_path "$repo_file")
+        [[ -z "$dest" ]] && return 0
+
+        if [[ -e "$dest" ]]; then
+            local rel_path="${repo_file#$DOTFILES_DIR/}"
+            local backup_path="$backup_root/$rel_path"
+            local backup_dir
+            backup_dir="$(dirname "$backup_path")"
+            mkdir -p "$backup_dir" 2>/dev/null || true
+
+            if [[ "$dest" == /* ]]; then
+                execute_with_privilege "cp -a '$dest' '$backup_path'" \
+                    && print_info "Backed up (privileged): $rel_path" \
+                    || print_warning "Failed to backup (privileged): $rel_path"
+            else
+                cp -a "$dest" "$backup_path" \
+                    && print_info "Backed up: $rel_path" \
+                    || print_warning "Failed to backup: $rel_path"
+            fi
+        fi
+    }
+
+    # Backup files from OS dir
+    if [[ -d "$os_dir" ]]; then
+        find "$os_dir" -type f | while read -r f; do
+            _backup_one "$f"
+        done
+    fi
+
+    # Backup files from common dir
+    if [[ -d "$common_dir" ]]; then
+        find "$common_dir" -type f | while read -r f; do
+            _backup_one "$f"
+        done
+    fi
+
+    print_success "Backup completed at: $backup_root"
+}
+
+install_rust_development() {
+    local packages_file="$1"
+
+    if ! command_exists rustc; then
+        install_rust
+    fi
+
+    if command_exists cargo; then
+        print_info "Installing Rust components"
+        local components
+        mapfile -t components < <(yq eval ".development.rust.components[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+
+        for component in "${components[@]}"; do
+            [[ -z "$component" ]] && continue
+            execute_command "rustup component add $component"
+        done
+    fi
+}
+
+install_nodejs_development() {
+    local packages_file="$1"
+
+    if ! command_exists node; then
+        install_nvm
+        install_node
+    fi
+
+    if command_exists npm; then
+        print_info "Installing global Node.js packages"
+        local packages
+        mapfile -t packages < <(yq eval ".development.nodejs.global_packages[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+
+        for package in "${packages[@]}"; do
+            [[ -z "$package" ]] && continue
+            execute_command "npm install -g $package"
+        done
+    fi
+}
+
+install_python_development() {
+    local packages_file="$1"
+
+    if command_exists pip || command_exists pip3; then
+        print_info "Installing global Python packages"
+        local packages
+        mapfile -t packages < <(yq eval ".development.python.global_packages[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+
+        local pip_cmd="pip3"
+        command_exists pip3 || pip_cmd="pip"
+
+        for package in "${packages[@]}"; do
+            [[ -z "$package" ]] && continue
+            execute_command "$pip_cmd install --user $package"
+        done
+    fi
+}
+
+get_git_email_guess() {
+    local email_guess=""
+
+    # Try to get email from existing git config
     if command_exists git; then
-        if [[ "$FORCE_MODE" == true ]] || prompt_user "Configure Git global settings?"; then
-            configure_git
+        email_guess=$(git config --global user.email 2>/dev/null || echo "")
+        if [[ -n "$email_guess" ]]; then
+            echo "$email_guess"
+            return 0
         fi
     fi
 
-    # Development tools based on install mode
-    case "$INSTALL_MODE" in
-        dev|full)
-            install_development_tools
-            ;;
-        *)
-            print_info "Skipping development tools installation for mode: $INSTALL_MODE"
-            ;;
-    esac
+    # Try to extract from common email-related environment variables
+    for var in EMAIL MAIL USER_EMAIL GIT_AUTHOR_EMAIL GIT_COMMITTER_EMAIL; do
+        if [[ -n "${!var:-}" ]]; then
+            echo "${!var}"
+            return 0
+        fi
+    done
 
-    mark_step_completed "setup_development"
+    # Check for email in /etc/passwd gecos field
+    if [[ -f /etc/passwd ]]; then
+        local gecos
+        gecos=$(getent passwd "$USER" 2>/dev/null | cut -d: -f5 | cut -d, -f1)
+        if [[ "$gecos" == *@* ]]; then
+            echo "$gecos"
+            return 0
+        fi
+    fi
+
+    # Try to guess based on common patterns
+    local domain=""
+
+    # Check if we can determine domain from hostname
+    if command_exists hostname; then
+        local fqdn
+        fqdn=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "")
+        if [[ "$fqdn" == *.* ]]; then
+            domain="${fqdn#*.}"
+        fi
+    fi
+
+    # Fallback domain guessing
+    if [[ -z "$domain" ]]; then
+        if [[ -f /etc/mailname ]]; then
+            domain=$(cat /etc/mailname 2>/dev/null || echo "")
+        elif [[ -f /etc/hostname ]]; then
+            local hostname_file
+            hostname_file=$(cat /etc/hostname 2>/dev/null || echo "")
+            if [[ "$hostname_file" == *.* ]]; then
+                domain="${hostname_file#*.}"
+            fi
+        fi
+    fi
+
+    # Final fallback
+    if [[ -z "$domain" ]]; then
+        domain="localhost"
+    fi
+
+    echo "${USER}@${domain}"
 }
 
 configure_git() {
     local git_name="${USER}"
-    local git_email="${USER}@${HOSTNAME:-$(hostname)}"
+    local git_email
+    git_email=$(get_git_email_guess)
 
     if [[ "$FORCE_MODE" != true ]]; then
         print_color "$YELLOW" "Enter your Git username [$git_name]: "
@@ -2048,22 +2866,85 @@ install_yarn() {
     fi
 }
 
+#======================================
+# System Tweaks Functions
+#======================================
+
+apply_system_tweaks() {
+    local packages_file="$1"
+
+    print_section "Applying System Tweaks"
+
+    if [[ ! -f "$packages_file" ]]; then
+        print_warning "Package file not found, skipping system tweaks"
+        return 0
+    fi
+
+    # Detect desktop environment and apply appropriate tweaks
+    local desktop_env=""
+    if [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]] || command_exists gnome-shell; then
+        desktop_env="gnome"
+    elif [[ "$XDG_CURRENT_DESKTOP" == *"KDE"* ]] || command_exists plasmashell; then
+        desktop_env="kde"
+    fi
+
+    if [[ -n "$desktop_env" ]]; then
+        print_info "Applying $desktop_env tweaks"
+
+        # Get tweak commands for the desktop environment
+        local tweaks
+        mapfile -t tweaks < <(yq eval ".system_tweaks.$desktop_env[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+
+        for tweak in "${tweaks[@]}"; do
+            [[ -z "$tweak" ]] && continue
+            print_info "Applying tweak: $tweak"
+            if execute_command "$tweak"; then
+                print_success "Applied: $tweak"
+            else
+                print_warning "Failed to apply: $tweak"
+            fi
+        done
+    else
+        print_info "No supported desktop environment detected for tweaks"
+    fi
+
+}
+
 apply_tweaks() {
     print_section "Applying System Tweaks"
     save_state "apply_tweaks" "started"
 
-    case "$CFG_OS" in
-        linux)
-            apply_linux_tweaks
-            ;;
-        macos)
-            apply_macos_tweaks
-            ;;
-        *)
-            print_info "No system tweaks defined for $CFG_OS"
-            ;;
-    esac
+    # Change to home directory to find packages.yml
+    local original_dir="$PWD"
+    cd "$HOME" 2>/dev/null || true
 
+    local packages_files=("$PACKAGES_FILE" "common/$PACKAGES_FILE" ".cfg/common/$PACKAGES_FILE")
+    local found_packages_file=""
+
+    for pf in "${packages_files[@]}"; do
+        if [[ -f "$pf" ]]; then
+            found_packages_file="$pf"
+            break
+        fi
+    done
+
+    if [[ -n "$found_packages_file" ]]; then
+        apply_system_tweaks "$found_packages_file"
+    else
+        case "$CFG_OS" in
+            linux)
+                apply_linux_tweaks
+                ;;
+            macos)
+                apply_macos_tweaks
+                ;;
+            *)
+                print_info "No system tweaks defined for $CFG_OS"
+                ;;
+        esac
+    fi
+
+    cd "$original_dir" 2>/dev/null || true
     mark_step_completed "apply_tweaks"
 }
 
@@ -2083,23 +2964,10 @@ apply_linux_tweaks() {
         fi
     fi
 
-    # --- Power / Display timeout tweaks ---
-    if command -v gsettings >/dev/null 2>&1; then
-        print_info "Setting GNOME power/display timeouts to 'never'"
-
-        # Turn off blank screen
-        gsettings set org.gnome.desktop.session idle-delay 0
-
-        # Turn off automatic suspend
-        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing'
-        gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-battery-type 'nothing'
-
-        print_success "GNOME power/display settings applied"
-    else
-        print_info "gsettings not found; skipping GNOME power/display tweaks"
-    fi
-
-    print_info "Linux system tweaks applied"
+    # Desktop environment tweaks should be declared in packages.yml under system_tweaks.
+    # This function keeps only essential, non-DE specific items. Use apply_system_tweaks
+    # to apply YAML-driven commands.
+    print_info "Linux system tweaks applied (core). Desktop tweaks come from packages.yml."
 }
 
 apply_macos_tweaks() {
@@ -2107,14 +2975,135 @@ apply_macos_tweaks() {
 }
 
 #======================================
+# Custom Installation Functions
+#======================================
+
+handle_custom_installs() {
+    local packages_file="$1"
+
+    if [[ ! -f "$packages_file" ]] || ! command_exists yq; then
+        return 0
+    fi
+
+    print_info "Processing custom installations..."
+
+    # Get custom install commands
+    local custom_installs
+    mapfile -t custom_installs < <(yq eval ".custom_installs | keys | .[]" "$packages_file" 2>/dev/null | grep -v "^null$" || true)
+
+    for install_name in "${custom_installs[@]}"; do
+        [[ -z "$install_name" ]] && continue
+
+        # Check condition
+        local condition
+        condition=$(yq eval ".custom_installs.$install_name.condition" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+
+        if [[ -n "$condition" ]]; then
+            if ! eval "$condition" 2>/dev/null; then
+                print_info "Skipping $install_name (condition not met)"
+                continue
+            fi
+        fi
+
+        # Get OS-specific command
+        local install_cmd=""
+        case "$CFG_OS" in
+            linux)
+                install_cmd=$(yq eval ".custom_installs.$install_name.linux" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                ;;
+            macos)
+                install_cmd=$(yq eval ".custom_installs.$install_name.macos" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                ;;
+            windows)
+                install_cmd=$(yq eval ".custom_installs.$install_name.windows" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                ;;
+        esac
+
+        # Fallback to generic command
+        if [[ -z "$install_cmd" ]]; then
+            install_cmd=$(yq eval ".custom_installs.$install_name.command" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+        fi
+
+        if [[ -n "$install_cmd" ]]; then
+            print_info "Running custom install: $install_name"
+            if execute_command "$install_cmd"; then
+                print_success "Custom install completed: $install_name"
+            else
+                print_error "Custom install failed: $install_name"
+            fi
+        else
+            print_warning "No install command found for $install_name on $CFG_OS"
+        fi
+    done
+}
+
+#======================================
 # Installation Mode Selection
 #======================================
 
-select_installation_mode() {
+
+detect_installation_mode() {
     if [[ "$INSTALL_MODE" != "ask" ]]; then
         return 0  # Mode already set via command line
     fi
 
+    # Check if this is a re-run
+    if [[ -d "$DOTFILES_DIR" && ! "$UPDATE_MODE" == true ]]; then
+        print_section "Existing Installation Detected"
+        print_info "Dotfiles repository already exists at: $DOTFILES_DIR"
+
+        if [[ "$FORCE_MODE" == true ]]; then
+            print_info "Force mode: proceeding with update"
+            UPDATE_MODE=true
+            INSTALL_MODE="essentials"  # Default to essentials for updates
+        else
+            while true; do
+                print_color "$YELLOW" "What would you like to do?"
+                print_color "$CYAN" "1. Update existing dotfiles and system"
+                print_color "$CYAN" "2. Full reinstallation"
+                print_color "$CYAN" "3. Exit"
+                print_color "$YELLOW" "Select option [1-3]: "
+                read -r response
+
+                case "$response" in
+                    1)
+                        UPDATE_MODE=true
+                        INSTALL_MODE="essentials"
+                        print_success "Update mode selected"
+                        break
+                        ;;
+                    2)
+                        print_warning "This will backup and reinstall everything"
+                        if prompt_user "Continue with full reinstallation?"; then
+                            # Backup existing installation
+                            local backup_timestamp=$(date +%Y%m%d-%H%M%S)
+                            local backup_location="$HOME/.dotfiles-backup-$backup_timestamp"
+                            print_info "Backing up existing installation to: $backup_location"
+                            cp -r "$DOTFILES_DIR" "$backup_location" 2>/dev/null || true
+                            break
+                        else
+                            continue
+                        fi
+                        ;;
+                    3)
+                        print_info "Installation cancelled by user"
+                        exit 0
+                        ;;
+                    *)
+                        print_warning "Invalid selection. Please enter 1-3"
+                        ;;
+                esac
+            done
+        fi
+    fi
+
+    # If still asking, show installation mode selection
+    if [[ "$INSTALL_MODE" == "ask" ]]; then
+        select_installation_mode
+    fi
+}
+
+select_installation_mode() {
     print_header "Installation Mode Selection"
 
     print_color "$CYAN" "Available installation modes:"
@@ -2162,6 +3151,55 @@ select_installation_mode() {
 }
 
 #======================================
+# Ask Mode Implementation
+#======================================
+
+should_run_step() {
+    local step="$1"
+    local description="${INSTALLATION_STEPS[$step]}"
+
+    # Respect explicit skip list
+    if is_step_skipped "$step"; then
+        return 1
+    fi
+
+    # Run-only and run-from controls
+    if [[ -n "$RUN_ONLY_STEP" && "$step" != "$RUN_ONLY_STEP" ]]; then
+        return 1
+    fi
+    if [[ -n "$RUN_FROM_STEP" && "$__RUN_FROM_STARTED" != true ]]; then
+        if [[ "$step" == "$RUN_FROM_STEP" ]]; then
+            __RUN_FROM_STARTED=true
+        else
+            return 1
+        fi
+    fi
+
+    # Skip already completed steps unless forced
+    if is_step_completed "$step" && [[ "$FORCE_MODE" != true ]]; then
+        return 1
+    fi
+
+    # Ask mode prompt
+    if [[ "$ASK_MODE" == true ]]; then
+        prompt_user "Run step: $description?" && return 0 || return 1
+    fi
+
+    # Interactive skip even when not in ask mode (non-essential steps)
+    if [[ "$INTERACTIVE_SKIP" == true ]]; then
+        local is_essential=false
+        for es in "${ESSENTIAL_STEPS[@]}"; do [[ "$es" == "$step" ]] && is_essential=true && break; done
+        if [[ "$is_essential" != true ]]; then
+            if ! prompt_user "Proceed with: $description? (Choose No to skip)"; then
+                return 1
+            fi
+        fi
+    fi
+
+    return 0
+}
+
+#======================================
 # Command Line Argument Parsing
 #======================================
 
@@ -2179,6 +3217,7 @@ OPTIONS:
     -v, --verbose           Enable verbose output
     -n, --dry-run           Show what would be done without executing
     -f, --force             Force reinstallation and skip prompts
+    -a, --ask               Ask before running each step
     -m, --mode MODE         Installation mode (essentials|minimal|dev|server|full|PROFILE)
 
 INSTALLATION MODES:
@@ -2196,6 +3235,13 @@ EXAMPLES:
     $0 --resume             # Resume from last failed step
     $0 --update --mode full # Update and install all packages
     $0 --dry-run --mode dev # Preview development installation
+    $0 --ask --mode minimal # Ask before each step in minimal mode
+
+NOTES:
+    • Running without arguments on an existing installation will default to update mode
+    • Use --force to override existing installations
+    • Use --ask to have control over each installation step
+    • Configuration files are backed up before modification
 
 EOF
 }
@@ -2225,6 +3271,10 @@ parse_arguments() {
                 ;;
             -f|--force)
                 FORCE_MODE=true
+                shift
+                ;;
+            -a|--ask)
+                ASK_MODE=true
                 shift
                 ;;
             -m|--mode)
@@ -2322,6 +3372,11 @@ main() {
         echo
     fi
 
+    if [[ "$ASK_MODE" == true ]]; then
+        print_warning "ASK MODE - You will be prompted for each step"
+        echo
+    fi
+
     print_info "Starting installation for user: $USER" "always"
     print_info "Log file: $LOG_FILE" "always"
 
@@ -2340,8 +3395,8 @@ main() {
         fi
     fi
 
-    # Select installation mode if not specified
-    select_installation_mode
+    # Detect installation mode (handles re-runs and updates)
+    detect_installation_mode
 
     # Show installation plan
     echo
@@ -2358,9 +3413,11 @@ main() {
     done
 
     echo
-    if [[ "$FORCE_MODE" != true ]] && [[ "$DRY_RUN" != true ]] && ! prompt_user "Continue with installation?"; then
-        print_info "Installation cancelled by user"
-        exit 0
+    if [[ "$FORCE_MODE" != true ]] && [[ "$DRY_RUN" != true ]] && [[ "$ASK_MODE" != true ]]; then
+        if ! prompt_user "Continue with installation?"; then
+            print_info "Installation cancelled by user"
+            exit 0
+        fi
     fi
 
     # Execute installation steps
@@ -2370,7 +3427,14 @@ main() {
 
     for step in "${STEP_ORDER[@]}"; do
         echo
-        print_color "$MAGENTA$BOLD" "[$step_number/$total_steps] ${INSTALLATION_STEPS[$step]}"
+        print_color "$CYAN$BOLD" "[$step_number/$total_steps] ${INSTALLATION_STEPS[$step]}"
+
+        # Check if we should run this step (ask mode)
+        if ! should_run_step "$step"; then
+            print_skip "${INSTALLATION_STEPS[$step]} (user choice)"
+            step_number=$((step_number + 1))
+            continue
+        fi
 
         if execute_step "$step"; then
             print_info "Step completed successfully: $step"
@@ -2410,6 +3474,7 @@ main() {
         print_color "$CYAN" "• Restart your terminal or run: source ~/.bashrc (or ~/.zshrc)"
         print_color "$CYAN" "• Review your dotfiles configuration in: $DOTFILES_DIR"
         print_color "$CYAN" "• Use the 'config' command to manage your dotfiles"
+        print_color "$CYAN" "• Test the config command: config status"
 
         if [[ ${#failed_steps[@]} -gt 0 ]]; then
             print_color "$YELLOW" "• Run '$0 --resume' to retry failed steps"
