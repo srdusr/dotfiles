@@ -1606,9 +1606,6 @@ deploy_config() {
     if [[ -d "$DOTFILES_DIR" ]]; then
         print_info "Checking out dotfiles from repository..."
 
-        # Reload shell configuration to make config function available
-        reload_shell_config
-
         # First, checkout files from the bare repository to restore directory structure
         if [[ "$DRY_RUN" == true ]]; then
             print_dry_run "config checkout"
@@ -1688,33 +1685,6 @@ verify_config_command() {
         print_warning "Config command not available"
         return 1
     fi
-}
-
-reload_shell_config() {
-    print_info "Reloading shell configuration..."
-
-    # Source common shell files if they exist
-    local shell_files=()
-
-    case "$(basename "$SHELL")" in
-        bash)
-            shell_files+=("$HOME/.bashrc" "$HOME/.profile")
-            ;;
-        zsh)
-            shell_files+=("$HOME/.zshrc" "$HOME/.config/zsh/.zshrc" "$HOME/.profile")
-            ;;
-        *)
-            shell_files+=("$HOME/.profile")
-            ;;
-    esac
-
-    for shell_file in "${shell_files[@]}"; do
-        if [[ -f "$shell_file" ]]; then
-            print_info "Sourcing: $shell_file"
-            # shellcheck disable=SC1090
-            source "$shell_file" 2>/dev/null || print_warning "Failed to source $shell_file"
-        fi
-    done
 }
 
 # Manual deployment function (fallback when config command not available)
