@@ -1,4 +1,3 @@
-
 #  ███████╗███████╗██╗  ██╗██████╗  ██████╗
 #  ╚══███╔╝██╔════╝██║  ██║██╔══██╗██╔════╝
 #    ███╔╝ ███████╗███████║██████╔╝██║
@@ -9,8 +8,12 @@
 # Profile zsh time
 #zmodload zsh/zprof
 
+
+
 # If not running interactively, don't do anything
-[[ $- != *i* ]] && return
+#[[ $- != *i* ]] && return
+# If not running interactively, and not being sourced, don’t do anything
+[[ $- != *i* ]] && [[ "${BASH_SOURCE[0]:-${(%):-%N}}" == "$0" ]] && return
 
 # Terminal key bindings
 #stty intr '^q' # Free Ctrl+C for copy use Ctrl+Q instead for Interrupt
