@@ -7,9 +7,6 @@
 # Ignore dotfiles dir
 .cfg
 
-# Ignore install.sh
-install.sh
-
 # Ignore Packer's compiled files
 packer_compiled.lua
 
@@ -56,3 +53,4 @@ node_modules/
 # Ignore virtual machine directory
 ^virt/
 
+.cfg
