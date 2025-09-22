@@ -36,6 +36,7 @@ INTERNET_AVAILABLE=false
 
 # Installation tracking
 INSTALL_SUMMARY=()
+
 FAILED_ITEMS=()
 SKIPPED_ITEMS=()
 COMPLETED_STEPS=()
@@ -1928,7 +1929,7 @@ setup_user_dirs() {
     if command_exists xdg-user-dirs-update; then
         # Suppress tool output to avoid misleading terms like "removed"; we only ensure presence.
         execute_command "xdg-user-dirs-update >/dev/null 2>&1 || true"
-        print_success "Ensured XDG user directories exist (standardized names may be renamed, never removed)"
+        print_success "Ensured XDG user directories exist"
     fi
 
     mark_step_completed "setup_user_dirs"

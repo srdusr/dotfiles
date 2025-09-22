@@ -47,6 +47,7 @@ dev:
   - nodejs
   - emacs
   - vscode
+  - ansible
 
 # Server-focused packages
 server:
@@ -64,6 +65,7 @@ server:
   - parted
   - sysstat
   - hwinfo
+  - ansible
 
 # Desktop environment packages
 desktop:
@@ -170,6 +172,27 @@ debian:
   qemu: qemu-system
   vscode: code
   fd: fd-find
+  openssh: openssh-server
+  ansible: ansible
+
+fedora:
+  # Core tools
+  python: python3 python3-pip
+  nodejs: nodejs npm
+  man: man-pages man-db
+  tree: tree
+  ntp: chrony
+  hack-font: adobe-source-code-pro-fonts
+  nerd-fonts: powerline-fonts
+  font-awesome: fontawesome-fonts
+  dejavu-fonts: dejavu-fonts-common
+  networkmanager: NetworkManager
+  qemu: qemu-kvm
+  vscode: code-oss
+  fd: fd-find
+  openssh: openssh-server
+  ansible: ansible
+  ninja: ninja-build
 
   # Desktop specific
   xorg: xorg xserver-xorg
@@ -210,6 +233,9 @@ rhel:
   qemu: qemu-kvm
   vscode: code
   fd: fd-find
+  openssh: openssh-server
+  ansible: ansible
+  ninja: ninja-build
 
   # Desktop specific
   xorg: xorg-x11-server-Xorg
@@ -245,6 +271,8 @@ opensuse:
   networkmanager: NetworkManager
   qemu: qemu
   vscode: code
+  openssh: openssh
+  ansible: ansible
 
 gentoo:
   # Core tools with full package paths
@@ -353,12 +381,20 @@ alpine:
   man: man-pages man-db
   ntp: chrony
   htop: htop
+  openssh: openssh
+  ansible: ansible
 
 void:
   python: python3 python3-pip
   nodejs: nodejs
   man: man-pages
   ntp: chrony
+  openssh: openssh
+  ripgrep: ripgrep
+  fd: fd
+  btop: btop
+  networkmanager: NetworkManager
+  ansible: ansible
 
 macos:
   # Homebrew packages
@@ -385,6 +421,7 @@ macos:
   - go
   - emacs
   - visual-studio-code
+  - ansible
 
 windows:
   # Chocolatey/Scoop/Winget packages
@@ -778,10 +815,6 @@ custom_installs:
     condition: "test $(uname) = Darwin && ! command -v brew"
     macos: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
 
-  oh-my-zsh:
-    condition: "test -d ~/.oh-my-zsh"
-    command: 'sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended'
-
   system_updates:
     condition: "true"  # Always available
     description: "Check and install system updates"
@@ -801,6 +834,31 @@ custom_installs:
       } else {
         Write-Host "PSWindowsUpdate module not installed. Install with: Install-Module PSWindowsUpdate"
       }
+
+  zsh_plugins:
+    condition: "command -v zsh"
+    description: "Install common Zsh plugins"
+    linux: |
+      ZPLUG_DIR="$HOME/.config/zsh/plugins"; mkdir -p "$ZPLUG_DIR"; command -v git >/dev/null 2>&1 || exit 0; c(){ n="$1"; u="$2"; [ -d "$ZPLUG_DIR/$n" ] && return 0; env -i PATH="$PATH" HOME="$HOME" GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/true git -c credential.helper= -c core.askPass= clone --depth 1 --single-branch "$u" "$ZPLUG_DIR/$n" 2>/dev/null || true; }; c zsh-you-should-use https://github.com/MichaelAquilina/zsh-you-should-use.git; c zsh-syntax-highlighting https://github.com/zsh-users/zsh-syntax-highlighting.git; c zsh-autosuggestions https://github.com/zsh-users/zsh-autosuggestions.git
+    macos: |
+      ZPLUG_DIR="$HOME/.config/zsh/plugins"; mkdir -p "$ZPLUG_DIR"; command -v git >/dev/null 2>&1 || exit 0; c(){ n="$1"; u="$2"; [ -d "$ZPLUG_DIR/$n" ] && return 0; env -i PATH="$PATH" HOME="$HOME" GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/true git -c credential.helper= -c core.askPass= clone --depth 1 --single-branch "$u" "$ZPLUG_DIR/$n" 2>/dev/null || true; }; c zsh-you-should-use https://github.com/MichaelAquilina/zsh-you-should-use.git; c zsh-syntax-highlighting https://github.com/zsh-users/zsh-syntax-highlighting.git; c zsh-autosuggestions https://github.com/zsh-users/zsh-autosuggestions.git
+
+  vscode_extensions:
+    condition: "command -v code"
+    description: "Install template VSCode extensions"
+    linux: |
+      for e in ms-python.python ms-vscode.cpptools golang.Go rust-lang.rust-analyzer esbenp.prettier-vscode eamodio.gitlens ms-azuretools.vscode-docker hashicorp.terraform redhat.ansible; do code --install-extension "$e" --force >/dev/null 2>&1 || true; done
+    macos: |
+      for e in ms-python.python ms-vscode.cpptools golang.Go rust-lang.rust-analyzer esbenp.prettier-vscode eamodio.gitlens ms-azuretools.vscode-docker hashicorp.terraform redhat.ansible; do code --install-extension "$e" --force >/dev/null 2>&1 || true; done
+
+  nix_home_manager:
+    condition: "command -v nix-env"
+    description: "Bootstrap Home Manager if missing"
+    linux: |
+      if ! command -v home-manager >/dev/null 2>&1; then nix-channel --add https://github.com/nix-community/home-manager/archive/master.tar.gz home-manager || true; nix-channel --update || true; nix-shell '<home-manager>' -A install || true; fi
+    macos: |
+      if ! command -v home-manager >/dev/null 2>&1; then nix-channel --add https://github.com/nix-community/home-manager/archive/master.tar.gz home-manager || true; nix-channel --update || true; nix-shell '<home-manager>' -A install || true; fi
+
 
 #======================================
 # Profile-specific package lists
@@ -871,6 +929,11 @@ package_managers:
     install: "dnf install -y"
     search: "dnf search"
 
+  fedora:
+    update: "dnf update -y"
+    install: "dnf install -y"
+    search: "dnf search"
+
   opensuse:
     update: "zypper update -y"
     install: "zypper install -y"
@@ -900,3 +963,7 @@ package_managers:
     update: "choco upgrade all -y"
     install: "choco install -y"
     search: "choco search"
+  nix:
+    update: "nix-channel --update && nix-env -u"
+    install: "nix-env -iA"
+    search: "nix-env -qaP"
