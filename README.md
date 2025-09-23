@@ -105,7 +105,7 @@ git clone --bare https://github.com/srdusr/dotfiles.git $env:USERPROFILE/.cfg
 
 3. Setup the `config` command/function
 
-##### Linux/MacOS
+**Linux/macOS:**
 Copy and paste the following snippet to any profile/startup file ie. `~/.bashrc`, `~/.zshrc` etc.
 
 <details>
@@ -418,7 +418,7 @@ fi
   </details>
 
 
-##### Windows
+**Windows PowerShell:**
 Paste the PowerShell code block directly into your PowerShell profile. 
 To find your profile path, simply run `$PROFILE` in your terminal. You can open and edit it with `notepad $PROFILE`.
 If the file doesn't exist, you can create it.
@@ -678,26 +678,17 @@ Restart the terminal or source the session profile file used.
 **Important:** After cloning the bare repository, you need to checkout the files to restore the directory structure:
 
 ```bash
-# Linux/MacOS/WSL
-config checkout
-```
-
-```ps1
-# Windows (PowerShell)
+# Linux/MacOS/WSL/Windows
 config checkout
 ```
 
 If you get conflicts about existing files, you can force the checkout:
 
 ```bash
-# Linux/MacOS/WSL
+# Linux/MacOS/WSL/Windows
 config checkout -f
 ```
 
-```ps1
-# Windows (PowerShell) 
-config checkout -f
-```
 
 5. Configure repository settings
 
@@ -734,7 +725,7 @@ config add --target windows ~/Documents/PowerShell/Microsoft.PowerShell_profile.
 config add --target windows "$env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
 
 # Linux WSL or Git Bash:
-config add --target windows /mnt/c/Users/\<User\>/Documents/PowerShell/Microsoft.PowerShell_profile.ps1
+config add --target windows /mnt/c/Users/`username`/Documents/PowerShell/Microsoft.PowerShell_profile.ps1
 
 # Add multiple files at once (each will be mapped appropriately)
 config add ~/.vim .tmux.conf # Will go to OS's home
