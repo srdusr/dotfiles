@@ -678,14 +678,12 @@ Restart the terminal or source the session profile file used.
 **Important:** After cloning the bare repository, you need to checkout the files to restore the directory structure:
 
 ```bash
-# Linux/MacOS/WSL/Windows
 config checkout
 ```
 
 If you get conflicts about existing files, you can force the checkout:
 
 ```bash
-# Linux/MacOS/WSL/Windows
 config checkout -f
 ```
 
