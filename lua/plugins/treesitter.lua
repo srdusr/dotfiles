@@ -1,31 +1,54 @@
-require'nvim-treesitter.configs'.setup {
-  -- A list of parser names, or "all" (the four listed parsers should always be installed)
+local M = {}
 
-  ensure_installed = {
-    "c",
-    "bash",
-    "lua",
-    "rust",
-  },
-  --ensure_installed = "all", -- one of "all" or a list of languages
-  --ignore_install = { "" }, -- List of parsers to ignore installing
-  sync_install = false,
-  auto_install = true,
-  highlight = {
-    enable = false,
-    disable = {},
-  },
-  indent = {
-    enable = true,
-    disable = {},
-    --disable = { "python", "css" }
-  },
-  autotag = {
-    enable = true,
-  },
-}
---vim.opt.foldmethod = "expr"
---vim.opt.foldexpr = "nvim_treesitter#foldexpr()"
+function M.setup()
+  local ok, treesitter = pcall(require, "nvim-treesitter.configs")
+  if not ok or not treesitter then
+    return false
+  end
 
---local parser_config = require "nvim-treesitter.parsers".get_parser_configs()
---parser_config.tsx.filetype_to_parsername = { "javascript", "typescript.tsx" }
+  -- Add custom parser directory to runtime path
+  vim.opt.runtimepath:append("$HOME/.local/share/treesitter")
+
+  -- Configure treesitter
+  treesitter.setup({
+    -- Install parsers in custom directory
+    parser_install_dir = "$HOME/.local/share/treesitter",
+    
+    -- Enable syntax highlighting
+    highlight = {
+      enable = true,
+      -- Disable additional regex-based highlighting to improve performance
+      additional_vim_regex_highlighting = false,
+    },
+    
+    -- Enable indentation
+    indent = {
+      enable = true,
+    },
+    
+    -- Additional modules to enable
+    incremental_selection = {
+      enable = true,
+      keymaps = {
+        init_selection = "gnn",
+        node_incremental = "grn",
+        scope_incremental = "grc",
+        node_decremental = "grm",
+      },
+    },
+    
+    -- Ensure parsers are installed automatically
+    ensure_installed = {
+      "bash", "c", "cpp", "css", "dockerfile", "go", "html", 
+      "javascript", "json", "lua", "markdown", "python", "rust", 
+      "toml", "typescript", "vim", "yaml"
+    },
+    
+    -- Auto-install parsers
+    auto_install = true,
+  })
+  
+  return true
+end
+
+return M

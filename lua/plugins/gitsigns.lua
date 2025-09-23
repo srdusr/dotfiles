@@ -1,4 +1,15 @@
-require("gitsigns").setup({
+local M = {}
+
+--- Setup and configure gitsigns
+-- This function initializes and configures the git signs in the gutter
+-- @return boolean True if setup was successful, false otherwise
+function M.setup()
+  local ok, gitsigns = pcall(require, 'gitsigns')
+  if not ok then
+    return false
+  end
+  
+  gitsigns.setup({
 				signs = {
 					--add = {
 					--	hl = "GitSignsAdd",
@@ -45,3 +56,30 @@ hi link GitSignsDelete DiffDelete
 hi link GitSignsTopDelete DiffDelete
 hi link GitSignsChangedDelete DiffDelete
 ]])
+  -- Set up highlights
+  vim.cmd([[
+    highlight DiffAdd guibg=none guifg=#21c7a8
+    highlight DiffModified guibg=none guifg=#82aaff
+    highlight DiffDelete guibg=none guifg=#fc514e
+    highlight DiffText guibg=none guifg=#fc514e
+    
+    hi link GitSignsAdd DiffAdd
+    hi link GitSignsChange DiffModified
+    hi link GitSignsDelete DiffDelete
+    hi link GitSignsTopDelete DiffDelete
+    hi link GitSignsChangedelete DiffDelete
+    hi link GitSignsChangedeleteLn DiffDelete
+    hi link GitSignsChangedeleteNr DiffDeleteNr
+  ]])
+  
+  return true
+end
+
+return M
+--'signs.delete.hl' is now deprecated, please define highlight 'GitSignsDelete'
+--'signs.delete.linehl' is now deprecated, please define highlight 'GitSignsDeleteLn'
+--'signs.delete.numhl' is now deprecated, please define highlight 'GitSignsDeleteNr'
+--'signs.topdelete.hl' is now deprecated, please define highlight 'GitSignsTopdelete'
+--'signs.topdelete.linehl' is now deprecated, please define highlight 'GitSignsTopdeleteLn'
+--'signs.topdelete.numhl' is now deprecated, please define highlight 'GitSignsTopdeleteNr'
+

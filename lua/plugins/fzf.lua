@@ -1,60 +1,43 @@
---vim.cmd([[
---    let g:fzf_history_dir = '~/.local/share/fzf-history'
---    map <leader>z :FZF<CR>
---    map <leader>a :Files<CR>
---    map <leader>l :Lines<CR>
---    map <leader>L :BLines<CR>
---    map <leader>B :Buffers<CR>
---    map <leader>h :History:<CR>
---    nnoremap <leader>g :Rg<CR>
---    "nnoremap <leader>t :Tags<CR>
---    nnoremap <leader>m :Marks<CR>
---    " This is the default extra key bindings
---    let g:fzf_action = {
---                \ 'ctrl-t': 'tab split',
---                \ 'ctrl-x': 'split',
---                \ 'ctrl-y': 'vsplit' }
---    let g:fzf_tags_command = 'ctags -R'
---    " Border color
---    let g:fzf_layout = {'up':'~90%', 'window': { 'width': 0.8, 'height': 0.8,'yoffset':0.5,'xoffset': 0.5, 'highlight': 'Todo', 'border': 'sharp' } }
---    let $FZF_DEFAULT_OPTS = '--layout=reverse --info=inline'
---    let $FZF_DEFAULT_COMMAND="rg --files --hidden"
---    " Customize fzf colors to match your color scheme
---    let g:fzf_colors =
---                \ { 'fg':      ['fg', 'Normal'],
---                \ 'bg':      ['bg', 'Normal'],
---                \ 'hl':      ['fg', 'Comment'],
---                \ 'fg+':     ['fg', 'CursorLine', 'CursorColumn', 'Normal'],
---                \ 'bg+':     ['bg', 'CursorLine', 'CursorColumn'],
---                \ 'hl+':     ['fg', 'Statement'],
---                \ 'info':    ['fg', 'PreProc'],
---                \ 'border':  ['fg', 'Ignore'],
---                \ 'prompt':  ['fg', 'Conditional'],
---                \ 'pointer': ['fg', 'Exception'],
---                \ 'marker':  ['fg', 'Keyword'],
---                \ 'spinner': ['fg', 'Label'],
---                \ 'header':  ['fg', 'Comment'] }
---    " Get Files
---    command! -bang -nargs=? -complete=dir Files
---                \ call fzf#vim#files(<q-args>, fzf#vim#with_preview({'options': ['--layout=reverse', '--info=inline']}), <bang>0)
---    " Get text in files with Rg
---    command! -bang -nargs=* Rg
---                \ call fzf#vim#grep(
---                \   'rg --column --line-number --no-heading --color=always --smart-case '.shellescape(<q-args>), 1,
---                \   fzf#vim#with_preview(), <bang>0)
---    " Ripgrep advanced
---    function! RipgrepFzf(query, fullscreen)
---        let command_fmt = 'rg --column --line-number --no-heading --color=always --smart-case %s || true'
---        let initial_command = printf(command_fmt, shellescape(a:query))
---        let reload_command = printf(command_fmt, '{q}')
---        let spec = {'options': ['--phony', '--query', a:query, '--bind', 'change:reload:'.reload_command]}
---        call fzf#vim#grep(initial_command, 1, fzf#vim#with_preview(spec), a:fullscreen)
---    endfunction
---    command! -nargs=* -bang RG call RipgrepFzf(<q-args>, <bang>0)
---    " Git grep
---    command! -bang -nargs=* GGrep
---                \ call fzf#vim#grep(
---                \   'git grep --line-number '.shellescape(<q-args>), 0,
---                \   fzf#vim#with_preview({'dir': systemlist('git rev-parse --show-toplevel')[0]}), <bang>0)
---    command! -bang FM call fzf#run(fzf#wrap({'source': 'cat ~/.fzf-marks | sed "s/.*: \(.*\)$/\1/" | sed "s#~#${HOME}#"', 'sink': 'lcd'}, <bang>0))
---]])
+local M = {}
+
+if not fzfLua then
+  return M
+end
+
+local ok_fzfLua, actions = pcall(require, "fzf-lua")
+if not ok_fzfLua then
+  return
+end
+
+local ok_fzfLua, actions = pcall(require, "fzf-lua.actions")
+if not ok_fzfLua then
+  return
+end
+
+
+local ok, fzfLua = pcall(require, "fzf-lua")
+if not ok then
+  vim.notify("fzf-lua not found", vim.log.levels.WARN)
+  return M
+end
+
+fzfLua.setup({
+  defaults = {
+    file_icons = "mini",
+  },
+  winopts = {
+    row = 0.5,
+    height = 0.7,
+  },
+  files = {
+    previewer = false,
+  },
+})
+
+vim.keymap.set("n", "<leader>fz", "<cmd>FzfLua files<cr>", { desc = "Fuzzy find files" })
+vim.keymap.set("n", "<leader>fzg", "<cmd>FzfLua live_grep<cr>", { desc = "Fuzzy grep files" })
+vim.keymap.set("n", "<leader>fzh", "<cmd>FzfLua helptags<cr>", { desc = "Fuzzy grep tags in help files" })
+vim.keymap.set("n", "<leader>fzt", "<cmd>FzfLua btags<cr>", { desc = "Fuzzy search buffer tags" })
+vim.keymap.set("n", "<leader>fzb", "<cmd>FzfLua buffers<cr>", { desc = "Fuzzy search opened buffers" })
+
+return M

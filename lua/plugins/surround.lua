@@ -1,4 +1,12 @@
-require("nvim-surround").setup({
+local M = {}
+
+function M.setup()
+  local ok, surround = pcall(require, 'nvim-surround')
+  if not ok or not surround then
+    return false
+  end
+
+  surround.setup({
   keymaps = {
     insert = false,
     insert_line = false,
@@ -18,5 +26,10 @@ require("nvim-surround").setup({
     ["r"] = false,
     ["q"] = false,
     ["s"] = false,
-  },
-})
+    },
+  })
+  
+  return true
+end
+
+return M
