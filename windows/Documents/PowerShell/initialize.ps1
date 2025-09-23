@@ -5,7 +5,7 @@
     .DESCRIPTION
     To bootstrap directly from GitHub, run these 2 cmdlets in a PowerShell prompt:
     > Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-    > irm 'https://raw.githubusercontent.com/srdusr/dotfiles/main/bootstrap.ps1' | iex
+    > irm 'https://raw.githubusercontent.com/srdusr/dotfiles/main/windows/Documents/PowerShell/bootstrap.ps1' | iex
 #>
 [CmdletBinding()]
 param (
@@ -202,7 +202,7 @@ function main {
                 return
             }
 
-            $script = (Join-Path $dotPath '.config\powershell\bootstrap.ps1')
+            $script = (Join-Path $dotPath 'Documents\PowerShell\bootstrap.ps1')
             Write-Host "Continue $script in child process"
             Start-Process -PassThru -NoNewWindow -FilePath "powershell.exe" -ArgumentList "-NoProfile -File $script setup" | Wait-Process
         }

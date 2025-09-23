@@ -424,17 +424,113 @@ macos:
   - ansible
 
 windows:
-  # Chocolatey/Scoop/Winget packages
   - git
   - ripgrep
   - fd
+  - sudo
+  - win32yank
   - microsoft-windows-terminal
-  - nodejs
-  - python
-  - neovim
-  - vscode
+  - wsl
   - firefox
+  - setdefaultbrowser
+  - nodejs
+  - bat
   - 7zip
+  - python
+  - javaruntime
+  - autohotkey
+  - bitwarden
+  - notepadplusplus
+  - neovim
+
+bloatware:
+  # - Anytime
+  - BioEnrollment
+  # - Browser
+  - ContactSupport
+  - Cortana
+  # - Defender
+  - Feedback
+  - Flash
+  # - Gaming    # Breaks Xbox Live Account Login
+  # - Holo
+  # - InternetExplorer
+  - Maps
+  # - MiracastView
+  - OneDrive
+  # - SecHealthUI
+  - Wallet
+  # - Xbox     # Causes a bootloop since upgrade 1511?
+
+default:
+  # default Windows 10 apps
+  # - Microsoft.3DBuilder
+  - Microsoft.Appconnector
+  - Microsoft.BingFinance
+  - Microsoft.BingNews
+  - Microsoft.BingSports
+  - Microsoft.BingTranslator
+  - Microsoft.BingWeather
+  # - Microsoft.FreshPaint
+  # - Microsoft.Microsoft3DViewer
+  - Microsoft.MicrosoftOfficeHub
+  - Microsoft.MicrosoftSolitaireCollection
+  - Microsoft.MicrosoftPowerBIForWindows
+  - Microsoft.MinecraftUWP
+  # - Microsoft.MicrosoftStickyNotes
+  # - Microsoft.NetworkSpeedTest
+  - Microsoft.Office.OneNote
+  # - Microsoft.OneConnect
+  - Microsoft.People
+  # - Microsoft.Print3D
+  - Microsoft.SkypeApp
+  - Microsoft.Wallet
+  # - Microsoft.Windows.Photos
+  # - Microsoft.WindowsAlarms
+  # - Microsoft.WindowsCalculator
+  - Microsoft.WindowsCamera
+  - microsoft.windowscommunicationsapps
+  - Microsoft.WindowsMaps
+  - Microsoft.WindowsPhone
+  - Microsoft.WindowsSoundRecorder
+  - Microsoft.WindowsStore
+  # - Microsoft.XboxApp
+  # - Microsoft.XboxGameOverlay
+  # - Microsoft.XboxIdentityProvider
+  # - Microsoft.XboxSpeechToTextOverlay
+  - Microsoft.ZuneMusic
+  - Microsoft.ZuneVideo
+
+  # Threshold 2 apps
+  - Microsoft.CommsPhone
+  - Microsoft.ConnectivityStore
+  - Microsoft.GetHelp
+  - Microsoft.Getstarted
+  - Microsoft.Messaging
+  - Microsoft.Office.Sway
+  - Microsoft.OneConnect
+  - Microsoft.WindowsFeedbackHub
+
+  # Redstone apps
+  - Microsoft.BingFoodAndDrink
+  - Microsoft.BingTravel
+  - Microsoft.BingHealthAndFitness
+  - Microsoft.WindowsReadingList
+
+  # non-Microsoft
+  - king.com.CandyCrushSaga
+  - king.com.CandyCrushSodaSaga
+  - king.com.*
+  - Facebook.Facebook
+
+  # apps which cannot be removed using Remove-AppxPackage
+  # - Microsoft.BioEnrollment
+  # - Microsoft.MicrosoftEdge
+  # - Microsoft.Windows.Cortana
+  # - Microsoft.WindowsFeedback
+  # - Microsoft.XboxGameCallableUI
+  # - Microsoft.XboxIdentityProvider
+  # - Windows.ContactSupport
 
 #======================================
 # Gentoo USE flags configuration
