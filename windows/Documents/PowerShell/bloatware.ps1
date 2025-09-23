@@ -306,9 +306,6 @@ foreach ($item in (Get-ChildItem "$env:WinDir\WinSxS\*onedrive*")) {
     }
 }
 
-# As a last step, disable UAC ------------------------
-New-ItemProperty -Path HKLM:Software\Microsoft\Windows\CurrentVersion\policies\system -Name EnableLUA -PropertyType DWord -Value 0 -Force
-
 # Remove OneDrive directory if it exists
 Write-Host "Removing OneDrive directory"
 
