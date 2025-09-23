@@ -42,31 +42,6 @@ Linux:
 
 ---
 
-## Usage Examples
-
-### Adding Files to Your Dotfiles
-
-```bash
-# Add a config file explicitly to the common directory in the repo
-config add --target common .bashrc
-
-# Add with a specific target directory
-config add --target windows/Documents/PowerShell ~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1
-
-# Windows:
-config add --target windows/Documents/PowerShell "$env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
-
-# Linux WSL or Git Bash:
-config add --target windows/Documents/PowerShell /mnt/c/Users/\<User\>/Documents/PowerShell/Microsoft.PowerShell_profile.ps1
-
-# Add multiple files at once (each will be mapped appropriately)
-config add ~/.vim .tmux.conf # Will go to OS's home
-
-# Add files outside of home
-config add --target linux/etc /etc/issue
-
-```
-
 ## Installation Methods
 
 ### Method 1: Shell Scripts (Recommended)
@@ -105,12 +80,6 @@ ansible-playbook -i inventory.yml playbook.yml -e dotfiles_profile=dev
 # Deploy to remote hosts
 ansible-playbook -i inventory.yml playbook.yml --limit linux
 ```
-
-**Note:** Both installation methods include:
-- System hardening and security configurations
-- Kernel/OS/distribution update checking
-- Profile-based package installation
-- Development environment setup
 
 ### Method 3: Installing onto a new system (Manual)
 
@@ -742,30 +711,38 @@ config config --local status.showUntrackedFiles no
 config deploy
 ```
 
+**Note:** All installation methods include:
+- System hardening and security configurations
+- Kernel/OS/distribution update checking
+- Profile-based package installation
+- Development environment setup
 
 ---
 
-### Auto-installer
+## Usage Examples
 
-Linux/macOS (one-liner):
+### Adding Files to Your Dotfiles
 
-```sh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh)"
+```bash
+# Add a config file explicitly to the common directory in the repo
+config add --target common .bashrc
+
+# Add with a specific target directory
+config add --target windows ~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1
+
+# Windows:
+config add --target windows "$env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+
+# Linux WSL or Git Bash:
+config add --target windows /mnt/c/Users/\<User\>/Documents/PowerShell/Microsoft.PowerShell_profile.ps1
+
+# Add multiple files at once (each will be mapped appropriately)
+config add ~/.vim .tmux.conf # Will go to OS's home
+
+# Add files outside of home
+config add --target linux/etc /etc/issue
+
 ```
-
-Windows PowerShell (one-liner):
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; irm 'https://raw.githubusercontent.com/srdusr/dotfiles/main/windows/Documents/PowerShell/bootstrap.ps1' | iex
-```
-
-Windows CMD (.bat alternative):
-
-```bat
-REM From the cloned repo, run the batch installer (if present):
-call windows\Documents\install.bat
-```
-
 ---
 
 <details>

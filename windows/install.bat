@@ -1,6 +1,11 @@
-REM Installing Dotfiles
+@echo off
+REM === Installing Dotfiles ===
 
-powershell . $HOME\.config\powershell\Microsoft.PowerShell_profile.ps1
-powershell Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-powershell . $HOME\.config\powershell\bootstrap.ps1
+REM Set execution policy for current user
+powershell -NoProfile -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force"
 
+REM Run PowerShell profile (dotfiles)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+
+REM Run bootstrap script
+powershell -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\Documents\PowerShell\bootstrap.ps1"
