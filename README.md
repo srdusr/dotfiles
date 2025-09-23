@@ -22,14 +22,6 @@ Welcome, and make yourself at <b><i>$HOME</i></b>
 - Easy dotfiles management that respects the file hierarchy/XDG structure of the platform.
 - Custom `config` command that intelligently manages files across different operating systems.
 
-Example:
-```bash
-config add .bashrc # → linux/home/.bashrc
-config add /etc/issue # → linux/etc/issue
-config commit -m "Updated dotfiles"
-config push -u origin main
-```
-
 ---
 
 ## Details
@@ -50,7 +42,77 @@ Linux:
 
 ---
 
-### Installing onto a new system (Manual)
+## Usage Examples
+
+### Adding Files to Your Dotfiles
+
+```bash
+# Add a config file explicitly to the common directory in the repo
+config add --target common .bashrc
+
+# Add with a specific target directory
+config add --target windows/Documents/PowerShell ~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1
+
+# Windows:
+config add --target windows/Documents/PowerShell "$env:USERPROFILE\Documents\PowerShell\Microsoft.PowerShell_profile.ps1"
+
+# Linux WSL or Git Bash:
+config add --target windows/Documents/PowerShell /mnt/c/Users/\<User\>/Documents/PowerShell/Microsoft.PowerShell_profile.ps1
+
+# Add multiple files at once (each will be mapped appropriately)
+config add ~/.vim .tmux.conf # Will go to OS's home
+
+# Add files outside of home
+config add --target linux/etc /etc/issue
+
+```
+
+## Installation Methods
+
+### Method 1: Shell Scripts (Recommended)
+
+**Linux/macOS:**
+```sh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh)"
+```
+
+**Windows PowerShell:**
+```powershell
+iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/srdusr/dotfiles/main/windows/Documents/PowerShell/bootstrap.ps1'))
+
+# or
+
+$bat = "$env:TEMP\install.bat"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/srdusr/dotfiles/main/windows/install.bat" -OutFile $bat
+cmd /c $bat
+```
+
+### Method 2: Ansible Automation
+
+Alternative to the shell scripts for managing multiple machines:
+
+```bash
+# Clone repository
+git clone https://github.com/srdusr/dotfiles.git
+cd dotfiles/ansible
+
+# Install Ansible
+pip install ansible
+
+# Deploy to localhost (replaces install.sh/bootstrap.ps1)
+ansible-playbook -i inventory.yml playbook.yml -e dotfiles_profile=dev
+
+# Deploy to remote hosts
+ansible-playbook -i inventory.yml playbook.yml --limit linux
+```
+
+**Note:** Both installation methods include:
+- System hardening and security configurations
+- Kernel/OS/distribution update checking
+- Profile-based package installation
+- Development environment setup
+
+### Method 3: Installing onto a new system (Manual)
 
 1. Avoid weird behaviour/recursion issues when `.cfg` tries to track itself
 
@@ -83,7 +145,6 @@ Copy and paste the following snippet to any profile/startup file ie. `~/.bashrc`
 ```bash
 # Dotfiles Management System
 if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
-
     # Core git wrapper with repository as work-tree
     _config() {
         git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
@@ -110,11 +171,9 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         # Check for paths that should go to the repository root
         case "$f" in
             common/*|linux/*|macos/*|windows/*|profile/*|README.md)
-                # If path already looks like a repo path, use it as is
                 echo "$f"
                 return
                 ;;
-            # Otherwise, convert to a relative path
             "$HOME/"*)
                 f="${f#$HOME/}"
                 ;;
@@ -124,7 +183,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         echo "$CFG_OS/home/$f"
     }
 
-    # Map repository path back to system path
     _sys_path() {
         local repo_path="$1"
         local os_path_pattern="$CFG_OS/"
@@ -136,17 +194,50 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         fi
 
         case "$repo_path" in
-            # Files in the home directory
+            # Common configs → OS-specific config dirs
+            common/config/*)
+                case "$CFG_OS" in
+                    linux)
+                        local base="${XDG_CONFIG_HOME:-$HOME/.config}"
+                        echo "$base/${repo_path#common/config/}"
+                        ;;
+                    macos)
+                        echo "$HOME/Library/Application Support/${repo_path#common/config/}"
+                        ;;
+                    windows)
+                        echo "$LOCALAPPDATA\\${repo_path#common/config/}"
+                        ;;
+                    *)
+                        echo "$HOME/.config/${repo_path#common/config/}"
+                        ;;
+                esac
+                ;;
+
+            # Common assets → stay in repo
+            common/assets/*)
+                echo "$HOME/.cfg/$repo_path"
+                ;;
+
+            # Other common files (dotfiles like .bashrc, .gitconfig, etc.) → $HOME
+            common/*)
+                echo "$HOME/${repo_path#common/}"
+                ;;
+
+            # OS-specific home
             */home/*)
                 echo "$HOME/${repo_path#*/home/}"
                 ;;
-            # Other files in the repo root
-            common/*|profile/*|README.md|linux/*|macos/*|windows/*)
+
+            # Profile configs and README → stay in repo
+            profile/*|README.md)
                 echo "$HOME/.cfg/$repo_path"
                 ;;
+
+            # Default fallback
             *)
-                echo "/$repo_path"
-                ;;
+              echo "$HOME/.cfg/$repo_path"
+              ;;
+
         esac
     }
 
@@ -162,24 +253,55 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
             elif command -v pkexec >/dev/null; then
                 pkexec "$@"
             else
-                echo "Error: No privilege escalation tool (sudo, doas, pkexec) found."
+                echo "Error: No privilege escalation tool found."
                 return 1
             fi
         fi
     }
 
-    # NOTE: can change `config` to whatever you feel comfortable ie. dotfiles, dots, cfg etc.
+    # Main config command
     config() {
         local cmd="$1"; shift
+        local target_dir=""
+        # Parse optional --target flag for add
+        if [[ "$cmd" == "add" ]]; then
+            while [[ "$1" == --* ]]; do
+                case "$1" in
+                    --target|-t)
+                        target_dir="$2"
+                        shift 2
+                        ;;
+                    *)
+                        echo "Unknown option: $1"
+                        return 1
+                        ;;
+                esac
+            done
+        fi
+
         case "$cmd" in
             add)
                 local file_path
                 for file_path in "$@"; do
-                    local repo_path="$(_repo_path "$file_path")"
+                    local repo_path
+                    if [[ -n "$target_dir" ]]; then
+                        local rel_path
+                        if [[ "$file_path" == /* ]]; then
+                            rel_path="$(basename "$file_path")"
+                        else
+                            rel_path="$file_path"
+                        fi
+                        repo_path="$target_dir/$rel_path"
+                    else
+                        repo_path="$(_repo_path "$file_path")"
+                    fi
+
                     local full_repo_path="$HOME/.cfg/$repo_path"
                     mkdir -p "$(dirname "$full_repo_path")"
                     cp -a "$file_path" "$full_repo_path"
-                    _config add "$repo_path"
+
+                    git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" add "$repo_path"
+
                     echo "Added: $file_path -> $repo_path"
                 done
                 ;;
@@ -187,7 +309,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 local rm_opts=""
                 local file_path_list=()
 
-                # Separate options from file paths
                 for arg in "$@"; do
                     if [[ "$arg" == "-"* ]]; then
                         rm_opts+=" $arg"
@@ -199,16 +320,13 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 for file_path in "${file_path_list[@]}"; do
                     local repo_path="$(_repo_path "$file_path")"
 
-                    # Use a dummy run of `git rm` to handle the recursive flag
                     if [[ "$rm_opts" == *"-r"* ]]; then
                         _config rm --cached -r "$repo_path"
                     else
                         _config rm --cached "$repo_path"
                     fi
 
-                    # Remove from the filesystem, passing the collected options
                     eval "rm $rm_opts \"$file_path\""
-
                     echo "Removed: $file_path"
                 done
                 ;;
@@ -218,12 +336,12 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ "$direction" == "to-repo" ]]; then
-                        if [[ -e "$sys_file" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
+                        if [[ -e "$sys_file" && -n "$(diff "$full_repo_path" "$sys_file" 2>/dev/null || echo "diff")" ]]; then
                             cp -a "$sys_file" "$full_repo_path"
                             echo "Synced to repo: $sys_file"
                         fi
                     elif [[ "$direction" == "from-repo" ]]; then
-                        if [[ -e "$full_repo_path" && -n "$(diff "$full_repo_path" "$sys_file")" ]]; then
+                        if [[ -e "$full_repo_path" && -n "$(diff "$full_repo_path" "$sys_file" 2>/dev/null || echo "diff")" ]]; then
                             local dest_dir="$(dirname "$sys_file")"
                             if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
                                 _sudo_prompt mkdir -p "$dest_dir"
@@ -238,14 +356,13 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 done
                 ;;
             status)
-                # Auto-sync any modified files
                 local auto_synced=()
                 while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
                     if [[ -e "$sys_file" && -e "$full_repo_path" ]]; then
                         if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
-                            \cp -fa "$sys_file" "$full_repo_path"
+                            cp -fa "$sys_file" "$full_repo_path"
                             auto_synced+=("$repo_file")
                         fi
                     fi
@@ -262,20 +379,47 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 ;;
             deploy)
                 _config ls-files | while read -r repo_file; do
-                    local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
-                    if [[ -e "$full_repo_path" ]]; then
-                        if [[ -n "$sys_file" ]]; then
-                            local dest_dir="$(dirname "$sys_file")"
-                            if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
-                                _sudo_prompt mkdir -p "$dest_dir"
-                                _sudo_prompt cp -a "$full_repo_path" "$sys_file"
-                            else
-                                mkdir -p "$dest_dir"
-                                cp -a "$full_repo_path" "$sys_file"
-                            fi
-                            echo "Deployed: $repo_file -> $sys_file"
+                    local sys_file="$(_sys_path "$repo_file")"  # destination only
+
+                    # Only continue if the source exists
+                    if [[ -e "$full_repo_path" && -n "$sys_file" ]]; then
+                        local dest_dir
+                        dest_dir="$(dirname "$sys_file")"
+
+                        # Create destination if needed
+                        if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
+                            _sudo_prompt mkdir -p "$dest_dir"
+                            _sudo_prompt cp -a "$full_repo_path" "$sys_file"
+                        else
+                            mkdir -p "$dest_dir"
+                            cp -a "$full_repo_path" "$sys_file"
                         fi
+
+                        echo "Deployed: $repo_file -> $sys_file"
+                    fi
+                done
+                ;;
+            checkout)
+                echo "Checking out dotfiles from .cfg..."
+                _config ls-files | while read -r repo_file; do
+                    local full_repo_path="$HOME/.cfg/$repo_file"
+                    local sys_file="$(_sys_path "$repo_file")"
+
+                    if [[ -e "$full_repo_path" && -n "$sys_file" ]]; then
+                        local dest_dir
+                        dest_dir="$(dirname "$sys_file")"
+
+                        # Create destination if it doesn't exist
+                        if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
+                            _sudo_prompt mkdir -p "$dest_dir"
+                            _sudo_prompt cp -a "$full_repo_path" "$sys_file"
+                        else
+                            mkdir -p "$dest_dir"
+                            cp -a "$full_repo_path" "$sys_file"
+                        fi
+
+                        echo "Checked out: $repo_file -> $sys_file"
                     fi
                 done
                 ;;
@@ -560,14 +704,39 @@ if (Test-Path "$HOME\.cfg" -and Test-Path "$HOME\.cfg\refs") {
 Restart the terminal or source the session profile file used.
 
 
-4. Make sure to not show untracked files
+4. Checkout dotfiles from the repository
+
+**Important:** After cloning the bare repository, you need to checkout the files to restore the directory structure:
+
+```bash
+# Linux/MacOS/WSL
+config checkout
+```
+
+```ps1
+# Windows (PowerShell)
+config checkout
+```
+
+If you get conflicts about existing files, you can force the checkout:
+
+```bash
+# Linux/MacOS/WSL
+config checkout -f
+```
+
+```ps1
+# Windows (PowerShell) 
+config checkout -f
+```
+
+5. Configure repository settings
 
 ```bash
 config config --local status.showUntrackedFiles no
 ```
 
-
-5. Deploy dotfiles
+6. Deploy dotfiles to system locations
 
 ```bash
 config deploy
@@ -578,34 +747,23 @@ config deploy
 
 ### Auto-installer
 
-Linux/MacOS:
+Linux/macOS (one-liner):
 
-```bash
-wget -q "https://github.com/srdusr/dotfiles/archive/main.tar.gz" -O "$HOME/Downloads/dotfiles.tar.gz"
-mkdir -p "$HOME/dotfiles-main"
-tar -xf "$HOME/Downloads/dotfiles.tar.gz" -C "$HOME/dotfiles-main" --strip-components=1
-mv -f "$HOME/dotfiles-main/"* "$HOME"
-rm -rf "$HOME/dotfiles-main"
-chmod +x "$HOME/install.sh"
-rm "$HOME/Downloads/dotfiles.tar.gz"
-$HOME/install.sh
+```sh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh)"
 ```
 
-Windows:
+Windows PowerShell (one-liner):
 
-```ps1
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; `
-$ProgressPreference = 'SilentlyContinue'; `
-Invoke-WebRequest "https://github.com/srdusr/dotfiles/archive/main.zip" `
--OutFile "$HOME\Downloads\dotfiles.zip"; `
-Expand-Archive -Path "$HOME\Downloads\dotfiles.zip" -DestinationPath "$HOME" -Force; `
-Move-Item -Path "$HOME\dotfiles-main\*" -Destination "$HOME" -Force; `
-Remove-Item -Path "$HOME\dotfiles-main" -Recurse -Force; `
-. "$HOME\install.bat"
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; irm 'https://raw.githubusercontent.com/srdusr/dotfiles/main/windows/Documents/PowerShell/bootstrap.ps1' | iex
+```
 
+Windows CMD (.bat alternative):
 
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-irm 'https://raw.githubusercontent.com/srdusr/dotfiles/main/windows/Documents/PowerShell/bootstrap.ps1' | iex
+```bat
+REM From the cloned repo, run the batch installer (if present):
+call windows\Documents\install.bat
 ```
 
 ---
@@ -663,7 +821,7 @@ To add a file specific to your operating system:
 
 ```bash
 # Bash/Zsh:
-config add .bashrc # This is added to $HOME/.cfg/linux/home/.bashrc
+config add --target common .bashrc # Added to $HOME/.cfg/common/.bashrc
 ```
 
 ```bash

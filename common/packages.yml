@@ -804,10 +804,11 @@ custom_installs:
   yq:
     condition: "! command -v yq"
     linux: |
+      mkdir -p "$HOME/.local/bin"
       YQ_VERSION=$(curl -s https://api.github.com/repos/mikefarah/yq/releases/latest | grep 'tag_name' | cut -d'"' -f4)
       YQ_BINARY="yq_linux_amd64"
-      curl -L "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/${YQ_BINARY}" -o ~/.local/bin/yq
-      chmod +x ~/.local/bin/yq
+      curl -L "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/${YQ_BINARY}" -o "$HOME/.local/bin/yq"
+      chmod +x "$HOME/.local/bin/yq"
     macos: "brew install yq"
     windows: "choco install yq"
 

@@ -4,6 +4,8 @@
 # Created On: Tue 06 Sep 2025 16:20:52 PM CAT
 # Project: Dotfiles installation script
 
+# TODO: allow optional change user/password, also optional change root password, first check if they are the same (auto)
+
 # Dependencies: git, curl
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
@@ -535,7 +537,8 @@ detect_package_manager() {
 
         if command_exists yq && [[ -n "$found_packages_file" ]]; then
             # Prefer distro block, fallback to manager block
-            local pm_update pm_install
+            # Initialize to avoid set -u (nounset) issues before assignment
+            local pm_update="" pm_install=""
             if [[ -n "$DISTRO" ]]; then
                 pm_update=$(yq eval ".package_managers.${DISTRO}.update" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
                 pm_install=$(yq eval ".package_managers.${DISTRO}.install" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
@@ -550,6 +553,9 @@ detect_package_manager() {
                 print_info "Using package manager commands from packages.yml"
             fi
         fi
+
+        # Export for compatibility with packages.yml custom commands that reference CFG_DISTRO
+        export CFG_DISTRO="$DISTRO"
 
         mark_step_completed "detect_package_manager"
         return 0
@@ -1194,8 +1200,6 @@ check_existing_config_command() {
                 CONFIG_COMMAND_AVAILABLE=true
                 CONFIG_COMMAND_FILE="$f"
                 print_success "Config command found in: $f"
-                # Do NOT source user shell files here to avoid early exits or side-effects.
-                # We'll rely on fallbacks (git/manual deploy) if the function is not in the current shell.
                 return 0
             fi
         fi
@@ -1623,7 +1627,8 @@ deploy_config() {
             else
                 # Fallback: use git directly
                 print_info "Using git directly to checkout files..."
-                if git --git-dir="$DOTFILES_DIR" --work-tree="$DOTFILES_DIR" checkout HEAD -- . 2>/dev/null; then
+                # IMPORTANT: use $HOME/.cfg as work-tree, never the bare repo path
+                if git --git-dir="$DOTFILES_DIR" --work-tree="$HOME/.cfg" checkout HEAD -- . 2>/dev/null; then
                     print_success "Files checked out using git directly"
                 else
                     print_warning "Git checkout had issues, continuing anyway..."
@@ -1679,13 +1684,24 @@ deploy_config() {
 }
 
 verify_config_command() {
+    # Always verify the function is actually available in this shell
     if type config >/dev/null 2>&1; then
+        CONFIG_COMMAND_AVAILABLE=true
         print_success "Config command is available and working"
         return 0
-    else
-        print_warning "Config command not available"
-        return 1
     fi
+    # Try sourcing the detected profile file if known
+    if [[ -n "$CONFIG_COMMAND_FILE" && -f "$CONFIG_COMMAND_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$CONFIG_COMMAND_FILE" 2>/dev/null || true
+        if type config >/dev/null 2>&1; then
+            CONFIG_COMMAND_AVAILABLE=true
+            print_success "Config command is available and working"
+            return 0
+        fi
+    fi
+    print_warning "Config command not available"
+    return 1
 }
 
 # Manual deployment function (fallback when config command not available)
@@ -1697,8 +1713,9 @@ manual_deploy_dotfiles() {
         return 1
     fi
 
-    local os_dir="$DOTFILES_DIR/$CFG_OS"
-    local common_dir="$DOTFILES_DIR/common"
+    # Source locations are always within the checked-out work-tree ($HOME/.cfg)
+    local os_dir="$HOME/.cfg/$CFG_OS"
+    local common_dir="$HOME/.cfg/common"
 
     deploy_file() {
         local repo_file="$1"
@@ -1730,7 +1747,8 @@ manual_deploy_dotfiles() {
                     esac
                     ;;
                 common/assets/*)
-                    sys_file="$HOME/.cfg/$rel_path"
+                    # Assets are repo-internal; do not deploy to filesystem
+                    return 0
                     ;;
                 common/*)
                     sys_file="$HOME/${rel_path#common/}"
@@ -1749,6 +1767,15 @@ manual_deploy_dotfiles() {
 
         sys_dir="$(dirname "$sys_file")"
         mkdir -p "$sys_dir"
+
+        # Avoid copying if source and destination resolve to the same file
+        local src_real dst_real
+        src_real=$(readlink -f -- "$repo_file" 2>/dev/null || echo "$repo_file")
+        dst_real=$(readlink -f -- "$sys_file" 2>/dev/null || echo "$sys_file")
+        if [[ -n "$dst_real" && "$src_real" == "$dst_real" ]]; then
+            print_skip "Skipping self-copy: $rel_path"
+            return 0
+        fi
 
         # Copy with privilege if path is system (/etc, /usr, etc.)
         if [[ "$sys_file" == /* ]]; then
@@ -1884,13 +1911,146 @@ install_dotfiles() {
     if [[ -d "$DOTFILES_DIR" ]]; then
         if [[ "$UPDATE_MODE" == true ]] || prompt_user "Dotfiles repository already exists. Update it?"; then
             print_info "Updating existing dotfiles..."
-            if execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' pull origin main"; then
+            # Detect ahead/behind before pulling to avoid unexpected fast-forwards
+            execute_command "git --git-dir='$DOTFILES_DIR' fetch origin main" || true
+            local ahead behind ab_line
+            ahead=0; behind=0
+            ab_line=$(git --git-dir="$DOTFILES_DIR" rev-list --left-right --count HEAD...origin/main 2>/dev/null || true)
+            # Expected format: "<ahead>\t<behind>"; parse safely
+            if [[ "$ab_line" =~ ^([0-9]+)[[:space:]]+([0-9]+)$ ]]; then
+                ahead="${BASH_REMATCH[1]}"
+                behind="${BASH_REMATCH[2]}"
+            fi
+            if [[ ${ahead:-0} -gt 0 && ${behind:-0} -eq 0 ]]; then
+                print_warning "Your local dotfiles are ahead of origin/main by $ahead commit(s)."
+                while true; do
+                    echo
+                    print_color "$YELLOW" "Choose an action for local-ahead state:"
+                    echo "  [k] Keep local (skip pull)"
+                    echo "  [p] Push local commits"
+                    echo "  [c] Commit new changes and push"
+                    echo "  [s] Stash uncommitted changes (if any) and pull"
+                    echo "  [a] Abort"
+                    printf "%b%s%b" "$YELLOW" "Enter choice [k/p/c/s/a]: " "$NOCOLOR"
+                    read -r choice
+                    case "${choice,,}" in
+                        k)
+                            print_warning "Keeping local commits; skipping pull"
+                            break
+                            ;;
+                        p)
+                            if execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' push origin HEAD:main"; then
+                                print_success "Pushed local commits"
+                            else
+                                print_error "Push failed"
+                            fi
+                            break
+                            ;;
+                        c)
+                            print_info "Committing changes before push..."
+                            printf "%b%s%b" "$YELLOW" "Commit message (default: 'WIP local changes via installer'): " "$NOCOLOR"
+                            read -r commit_msg
+                            [[ -z "$commit_msg" ]] && commit_msg="WIP local changes via installer"
+                            if execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' add -A" \
+                               && execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' commit -m \"$commit_msg\"" \
+                               && execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' push origin HEAD:main"; then
+                                print_success "Committed and pushed"
+                            else
+                                print_error "Commit/push failed"
+                            fi
+                            break
+                            ;;
+                        s)
+                            print_info "Stashing local (including untracked) before pull..."
+                            if execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' stash push -u -m 'installer-stash'"; then
+                                print_success "Stashed local changes"
+                            else
+                                print_error "Stash failed"
+                            fi
+                            break
+                            ;;
+                        a)
+                            print_error "Aborted by user"
+                            mark_step_failed "install_dotfiles"
+                            return 1
+                            ;;
+                        *)
+                            print_warning "Invalid choice. Please enter k/p/c/s/a."
+                            ;;
+                    esac
+                done
+            fi
+            # If remote is ahead (fast-forward), ask the user before pulling
+            if [[ ${behind:-0} -gt 0 && ${ahead:-0} -eq 0 ]]; then
+                print_warning "Origin/main is ahead by $behind commit(s)."
+                if ! prompt_user "Fast-forward to origin/main now?"; then
+                    print_skip "User chose not to fast-forward; skipping pull"
+                    # Skip pull entirely
+                    goto_after_pull=true
+                fi
+            fi
+            if [[ "${goto_after_pull:-false}" == true ]] || execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' pull origin main"; then
                 update=true
                 print_success "Dotfiles updated successfully"
             else
                 print_error "Failed to pull updates"
-                mark_step_failed "install_dotfiles"
-                return 1
+                # Interactive resolution for local changes
+                while true; do
+                    echo
+                    print_color "$YELLOW" "Local changes detected. Choose an action:"
+                    echo "  [c] Commit local changes"
+                    echo "  [s] Stash local changes"
+                    echo "  [k] Keep local changes (skip pulling)"
+                    echo "  [a] Abort"
+                    printf "%b%s%b" "$YELLOW" "Enter choice [c/s/k/a]: " "$NOCOLOR"
+                    read -r choice
+                    case "${choice,,}" in
+                        c)
+                            print_info "Committing local changes..."
+                            printf "%b%s%b" "$YELLOW" "Commit message (default: 'WIP local changes via installer'): " "$NOCOLOR"
+                            read -r commit_msg
+                            [[ -z "$commit_msg" ]] && commit_msg="WIP local changes via installer"
+                            if execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' add -A" \
+                               && execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' commit -m \"$commit_msg\""; then
+                                print_success "Committed local changes"
+                                print_info "Retrying pull..."
+                                if execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' pull origin main"; then
+                                    update=true; print_success "Dotfiles updated successfully"; break
+                                else
+                                    print_error "Pull failed again after commit. You may resolve manually or choose another option."
+                                fi
+                            else
+                                print_error "Commit failed. Try another option."
+                            fi
+                            ;;
+                        s)
+                            print_info "Stashing local changes..."
+                            if execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' stash push -u -m 'installer-stash'"; then
+                                print_success "Stashed local changes"
+                                print_info "Retrying pull..."
+                                if execute_command "git --git-dir='$DOTFILES_DIR' --work-tree='$HOME/.cfg' pull origin main"; then
+                                    update=true; print_success "Dotfiles updated successfully"; break
+                                else
+                                    print_error "Pull failed again after stash. You may resolve manually or choose another option."
+                                fi
+                            else
+                                print_error "Stash failed. Try another option."
+                            fi
+                            ;;
+                        k)
+                            print_warning "Keeping local changes and skipping pull"
+                            break
+                            ;;
+                        a)
+                            print_error "Aborted by user"
+                            mark_step_failed "install_dotfiles"
+                            return 1
+                            ;;
+                        *)
+                            print_warning "Invalid choice. Please enter c/s/k/a."
+                            ;;
+                    esac
+                done
             fi
         else
             print_skip "Skipping dotfiles update"
@@ -2234,16 +2394,60 @@ manage_service() {
     local action="$1"
     local service="$2"
     local init_system="$3"
-    local success=false
+    # use numeric success code: 0=success, 1=failure
+    local success=1
 
     case "$init_system" in
         systemd)
-            if [ "$action" == "enable" ]; then
-                execute_command "$PRIVILEGE_TOOL systemctl enable '$service'"
-                success=$?
-            elif [ "$action" == "start" ]; then
-                execute_command "$PRIVILEGE_TOOL systemctl start '$service'"
-                success=$?
+            # Resolve common generic service names to distro-specific systemd unit names
+            local svc_candidates=()
+            local lower_service
+            lower_service="${service,,}"
+            case "$lower_service" in
+                networkmanager)
+                    svc_candidates+=("NetworkManager" "NetworkManager.service" "network-manager")
+                    ;;
+                sshd)
+                    # Debian uses 'ssh' service, others commonly use 'sshd'
+                    svc_candidates+=("sshd" "ssh" "sshd.service" "ssh.service")
+                    ;;
+                *)
+                    svc_candidates+=("$service")
+                    ;;
+            esac
+
+            local tried=false
+            local rc=1
+            for svc in "${svc_candidates[@]}"; do
+                tried=true
+                if [ "$action" == "enable" ]; then
+                    # Prefer enabling and starting in one go when possible
+                    if ! execute_command "$PRIVILEGE_TOOL systemctl enable --now '$svc'"; then
+                        execute_command "$PRIVILEGE_TOOL systemctl enable '$svc'"
+                    fi
+                    rc=$?
+                elif [ "$action" == "start" ]; then
+                    execute_command "$PRIVILEGE_TOOL systemctl start '$svc'"
+                    rc=$?
+                else
+                    rc=1
+                fi
+                if [[ $rc -eq 0 ]]; then
+                    success=0
+                    break
+                fi
+                print_warning "Failed to $action service candidate: $svc"
+            done
+            # If we didn't have a special mapping, fall back to original name once
+            if [[ "$tried" == false ]]; then
+                if [ "$action" == "enable" ]; then
+                    execute_command "$PRIVILEGE_TOOL systemctl enable '$service'"
+                    rc=$?
+                elif [ "$action" == "start" ]; then
+                    execute_command "$PRIVILEGE_TOOL systemctl start '$service'"
+                    rc=$?
+                fi
+                [[ $rc -eq 0 ]] && success=0
             fi
             ;;
         openrc)
@@ -2289,7 +2493,7 @@ manage_service() {
             ;;
     esac
 
-    return $((1 - success))
+    return $success
 }
 
 #======================================
@@ -2936,8 +3140,6 @@ apply_linux_tweaks() {
     fi
 
     # Desktop environment tweaks should be declared in packages.yml under system_tweaks.
-    # This function keeps only essential, non-DE specific items. Use apply_system_tweaks
-    # to apply YAML-driven commands.
     print_info "Linux system tweaks applied (core). Desktop tweaks come from packages.yml."
 }
 
@@ -2970,10 +3172,18 @@ handle_custom_installs() {
         condition=$(yq eval ".custom_installs.$install_name.condition" "$packages_file" 2>/dev/null | grep -v "^null$" || echo "")
 
         if [[ -n "$condition" ]]; then
+            # Evaluate condition safely even under set -u (nounset)
+            local -i _had_nounset=0
+            if set -o | grep -q "nounset\s*on"; then
+                _had_nounset=1
+                set +u
+            fi
             if ! eval "$condition" 2>/dev/null; then
+                if [[ $_had_nounset -eq 1 ]]; then set -u; fi
                 print_info "Skipping $install_name (condition not met)"
                 continue
             fi
+            if [[ $_had_nounset -eq 1 ]]; then set -u; fi
         fi
 
         # Get OS-specific command
@@ -2999,6 +3209,13 @@ handle_custom_installs() {
             print_info "Running custom install: $install_name"
             if execute_command "$install_cmd"; then
                 print_success "Custom install completed: $install_name"
+                # If yq was installed into ~/.local/bin via custom install, ensure PATH includes it for current session
+                if [[ "$install_name" == "yq" && -x "$HOME/.local/bin/yq" ]]; then
+                    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+                        export PATH="$HOME/.local/bin:$PATH"
+                        print_info "Added $HOME/.local/bin to PATH for current session"
+                    fi
+                fi
             else
                 print_error "Custom install failed: $install_name"
             fi
