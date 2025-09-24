@@ -48,7 +48,7 @@ Linux:
 
 **Linux/macOS:**
 ```sh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh)"
 ```
 
 **Windows PowerShell:**
