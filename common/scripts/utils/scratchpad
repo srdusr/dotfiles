@@ -1,0 +1,147 @@
+#!/bin/bash
+
+# Created By: srdusr
+# Created On: Tue 07 Mar 2023 15:06:47 PM CAT
+# Project: Agnostic scratchpad/dropdown terminal that works on most window managers
+
+# Dependencies: wmctrl, xprop, xdo, xdotool
+# NOTE: Ensure script is included in system's path and can therefore be invoked with the command 'scratchpad'.
+#       Furthermore make sure the terminal is using x11 as a backend in wayland to allow this to work.
+#       Example: wezterm.lua: enable_wayland = false,
+#                 kitty.conf: linux_display_server x11
+
+# Set the environment variables to x11 to allow working in Wayland
+#export GDK_BACKEND=x11
+#export QT_QPA_PLATFORM=xcb
+#export WAYLAND_DISPLAY=""
+#export WINIT_UNIX_BACKEND=x11
+#export WAYLAND_DISPLAY=wayland-0
+
+# Supported terminals and dropdown class
+supported_terminals=("wezterm" "kitty" "alacritty")
+
+# Check if any supported terminal with scratchpad class is running
+for term in "${supported_terminals[@]}"; do
+  if pgrep -f "$term.*--class scratchpad" >/dev/null; then
+    my_term="$term"
+    break
+  fi
+done
+
+# If no supported terminal is running, start the first available one
+if [ "$my_term" = "" ]; then
+  for term in "${supported_terminals[@]}"; do
+    if command -v "$term" >/dev/null 2>&1; then
+      my_term="$term"
+      break
+    fi
+  done
+  if [ "$my_term" = "" ]; then
+    echo "No supported terminal found." && exit 1
+  fi
+
+  # Start terminal with scratchpad class
+  case "$my_term" in
+  "wezterm") wezterm start --class scratchpad -e tmux new-session -A -s tmux -e bash & ;;
+  "kitty") kitty --class scratchpad tmux new-session -A -s tmux -e bash & ;;
+  "alacritty") alacritty --class scratchpad -e tmux new-session -A -s tmux -e bash & ;;
+  esac
+fi
+
+# Get the window ID of the scratchpad terminal
+id="$(xdo id -N scratchpad)"
+# Get the ID of the currently focused window
+focused_id="$(xdotool getwindowfocus)"
+
+# Get class of the currently focused window
+focused_class="$(xprop -id "$focused_id" WM_CLASS 2>/dev/null | awk -F '"' '{print $4}')"
+
+# Toggle visible/hide and smart focus
+if [ "$id" != "" ]; then
+  if xwininfo -id "$id" | grep "Map State: IsViewable" >/dev/null; then
+    if [ "$focused_id" = "$id" ] || [ "$focused_class" = "scratchpad" ]; then
+      # Scratchpad is focused, hide it
+      dimensions="$(xwininfo -id "$id" | awk '/Width:|Height:/ { printf("%s=%s;", tolower($1), $2) }')"
+      xdo hide "$id" 2>/dev/null
+    else
+      # Scratchpad is visible but not focused
+      xdotool windowactivate "$id"
+      xdotool windowfocus "$id"
+      hyprctl dispatch focuswindow scratchpad
+    fi
+  else
+    # Scratchpad is hidden, show and focus it
+    xdo show "$id"
+    xdotool windowsize "$id" "$(echo "$dimensions" | tr ';' ' ')" 2>/dev/null
+    xdotool windowactivate "$id"
+    xdotool windowfocus "$id"
+    hyprctl dispatch focuswindow scratchpad
+  fi
+fi
+
+## Get the window ID of the PiP window by title
+#pip_id="$(xdo id -n "Picture-in-Picture")"
+#
+## Toggle scratchpad terminal visibility
+#if [ "$id" != "" ]; then
+#  if xwininfo -id "$id" | grep "Map State: IsViewable" >/dev/null; then
+#    # Scratchpad is visible, hide it
+#    dimensions="$(xwininfo -id "$id" | awk '/Width:|Height:/ { printf("%s=%s;", tolower($1), $2) }')"
+#    xdo hide "$id" 2>/dev/null
+#  else
+#    # Scratchpad is hidden, show it and restore dimensions
+#    xdo show "$id"
+#    xdotool windowsize "$id" "$(echo "$dimensions" | tr ';' ' ')" 2>/dev/null
+#    xdotool windowactivate "$id"
+#    xdotool windowfocus "$id"
+#
+#    # Adjust layer based on PiP window presence
+#    if [ "$pip_id" != "" ]; then
+#      hyprctl dispatch layer "$id" 1
+#    else
+#      hyprctl dispatch layer "$id" 0
+#    fi
+#
+#    hyprctl dispatch focuswindow scratchpad
+#  fi
+#fi
+
+## Get the window ID of the scratchpad terminal
+#id=$(hyprctl clients -j | jq -r '.[] | select(.class=="scratchpad").address')
+#
+## Toggle scratchpad terminal visibility
+#if [ -n "$id" ]; then
+#  focused=$(hyprctl activewindow -j | jq -r '.address')
+#  if [ "$focused" = "$id" ]; then
+#    # Scratchpad is focused, minimize it
+#    hyprctl dispatch move "address:$id workspace silent 0"
+#  else
+#    # Show scratchpad, set above normal windows but below PiP
+#    hyprctl dispatch movetoworkspace current address:$id
+#    hyprctl dispatch focuswindow address:$id
+#    hyprctl dispatch layer "address:$id above"
+#    hyprctl dispatch focuswindow address:$id
+#  fi
+#fi
+
+## Get the window ID of the PiP window by title
+#pip_id=$(hyprctl clients -j | jq -r '.[] | select(.title=="Picture-in-Picture").address')
+#
+## Toggle scratchpad terminal visibility
+#if [ -n "$id" ]; then
+#  focused=$(hyprctl activewindow -j | jq -r '.address')
+#  if [ "$focused" = "$id" ]; then
+#    # Scratchpad is focused, minimize it
+#    hyprctl dispatch move "address:$id workspace silent 0"
+#  else
+#    # Show scratchpad, set above normal windows but below PiP
+#    hyprctl dispatch movetoworkspace current address:$id
+#    hyprctl dispatch focuswindow address:$id
+#    if [ -n "$pip_id" ]; then
+#      hyprctl dispatch layer "address:$id below"
+#    else
+#      hyprctl dispatch layer "address:$id above"
+#    fi
+#    hyprctl dispatch focuswindow address:$id
+#  fi
+#fi

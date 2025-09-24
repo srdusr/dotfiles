@@ -1,0 +1,102 @@
+#!/bin/sh
+
+# === Config: directory for QEMU sockets ===
+QEMU_SOCK_DIR="/home/$(whoami)/virt/machines"
+
+# === Send 'print' key to QEMU monitor ===
+send_print_to_qemu() {
+  monitor_socket=$(find "$QEMU_SOCK_DIR" -maxdepth 1 -type s -name '*-monitor.socket' | head -n1)
+  if [ "$monitor_socket" = "" ]; then
+    echo "No QEMU monitor socket found."
+    return 1
+  fi
+  echo "Using QEMU monitor socket: $monitor_socket"
+  if ! printf "sendkey print\n" | socat - UNIX-CONNECT:"$monitor_socket"; then
+    echo "Failed to send key via socat."
+    return 1
+  fi
+  echo "Sent 'sendkey print' to QEMU successfully."
+  return 0
+}
+
+# === Detect if current window is QEMU (X11 only) ===
+if [ "$DISPLAY" != "" ] && command -v xprop >/dev/null 2>&1; then
+  win_id=$(xprop -root _NET_ACTIVE_WINDOW | awk -F' ' '{print $5}')
+  class=$(xprop -id "$win_id" WM_CLASS 2>/dev/null | awk -F'"' '{print $4}')
+  if [ "$class" = "qemu-system-x86_64" ]; then
+    send_print_to_qemu && exit 0
+    # if sending fails, optionally fallback or exit anyway
+    exit 1
+  fi
+fi
+#if command -v hyprctl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+#  focused_class="$(hyprctl activewindow -j | jq -r '.class' 2>/dev/null)"
+#  if [ "$focused_class" = "qemu-system-x86_64" ]; then
+#    send_print_to_qemu && exit 0
+#  fi
+#fi
+
+DIR="$HOME/pictures/screenshots"
+OUTPUT_DIR="$HOME/documents/ocr_output"
+
+# Create the directories if they don't exist
+[ ! -d "$DIR" ] && mkdir -pv "$DIR"
+[ ! -d "$OUTPUT_DIR" ] && mkdir -pv "$OUTPUT_DIR"
+
+file="$DIR/screenshot_$(date '+%Y-%m-%d_%H-%M-%S').png"
+text_file="$OUTPUT_DIR/ocr_output_$(date '+%Y-%m-%d_%H-%M-%S')"
+
+copy_to_clipboard() {
+  if [ "$WAYLAND_DISPLAY" != "" ]; then
+    wl-copy <"$1"
+  elif [ "$DISPLAY" != "" ]; then
+    xclip -selection clipboard -i <"$1"
+  else
+    echo "No display server detected. Cannot copy to clipboard."
+    return 1
+  fi
+}
+
+case "$1" in
+screen) grim "$file" ;;
+output) slurp -o -r | grim -g - "$file" ;;
+area) slurp | grim -g - "$file" ;;
+output-area) slurp -o | grim -g - "$file" ;;
+ocr) slurp | grim -g - "$file" && tesseract "$file" "$text_file" ;;
+ocr-clipboard)
+  slurp | grim -g - "$file" && tesseract "$file" "$text_file"
+  if [ -f "$text_file.txt" ]; then
+    copy_to_clipboard "$text_file.txt"
+    CLIP_STATUS=$?
+    if [ "$CLIP_STATUS" -eq 0 ]; then
+      command rm -f "$text_file.txt"
+      notify-send -t 10000 --app-name "Screenshot" "OCR to Clipboard" "Text copied to clipboard."
+      echo "OCR output copied to clipboard and file deleted."
+    else
+      notify-send -t 10000 --app-name "Screenshot" "Clipboard Copy Failed" "Failed to copy text to clipboard."
+      echo "Failed to copy text to clipboard."
+    fi
+  else
+    notify-send -t 10000 --app-name "Screenshot" "OCR Error" "OCR process failed."
+    exit 1
+  fi
+  ;;
+*)
+  echo "Invalid argument"
+  notify-send -t 10000 --app-name "Screenshot" "Screenshot" "Something went wrong."
+  exit 1
+  ;;
+esac
+
+if [ "$1" = "ocr" ]; then
+  if [ -f "$text_file" ]; then
+    notify-send -t 10000 --app-name "Screenshot" "OCR Complete" "Text saved to $text_file"
+    echo "OCR output saved to: $text_file"
+  else
+    notify-send -t 10000 --app-name "Screenshot" "OCR Error" "OCR process failed."
+    exit 1
+  fi
+else
+  notify-send -t 10000 --app-name "Screenshot" "Screenshot" "Saved as $file"
+  echo "$file"
+fi

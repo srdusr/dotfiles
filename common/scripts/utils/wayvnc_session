@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Usage: ./wayvnc_session [address] [port]
+# Default: 0.0.0.0 5900
+
+ADDR=${1:-0.0.0.0}
+PORT=${2:-5900}
+
+echo "Starting Wayland VNC server on $ADDR:$PORT"
+wayvnc $ADDR $PORT

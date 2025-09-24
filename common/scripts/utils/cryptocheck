@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+if [ ! -d ~/.cache/crypto ]; then
+	mkdir ~/.cache/crypto
+fi
+ticker=(BTC ETH ADA DOT SOL XMR)
+
+for currency in "${ticker[@]}"; do
+    echo "$currency"
+done | while read coin
+    do
+	    price=$(curl rate.sx/1$coin)
+	    if [ $coin = "BTC" ]; then
+		    icon=󰠓
+	    elif [ $coin = "ETH" ]; then
+		    icon=󰡪
+	    elif [ $coin = "ADA" ]; then
+		    icon=󰝨
+        elif [ $coin = "DOT" ]; then
+		    icon=󰐇
+	    elif [ $coin = "SOL" ]; then
+		    icon=󰘙
+	    elif [ $coin = "XMR" ]; then
+		    icon=󰝴
+	    fi
+
+	    echo "$icon $coin: $price" > ~/.cache/crypto/$coin
+
+    done
+
+date > ~/.cache/crypto/time
+

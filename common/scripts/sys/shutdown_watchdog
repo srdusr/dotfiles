@@ -1,0 +1,11 @@
+#!/bin/sh
+
+LOGFILE="/tmp/shutdown_watchdog.log"
+
+while true; do
+  echo "--- $(date) ---" >> "$LOGFILE"
+  uptime >> "$LOGFILE"
+  sensors >> "$LOGFILE" 2>/dev/null
+  acpi -V >> "$LOGFILE" 2>/dev/null
+  sleep 10
+done

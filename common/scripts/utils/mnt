@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#  mount disk
+set -e
+. ~/etc/colors/current
+
+d() case $LABEL in
+Windows) echo "/win" ;;
+*) echo "${1:-$HOME}/dev/$NAME" ;;
+esac
+
+lsblk -Po NAME,SIZE,MOUNTPOINT,FSTYPE,LABEL | while read -r a; do
+    eval "$a"
+
+    [ "$FSTYPE" ] && [ ! "$MOUNTPOINT" ] &&
+        printf "%-4s:%s:%s:-> %s\n" \
+            "$NAME" \
+            "$SIZE" \
+            "${LABEL:-unnamed}" \
+            "$(d \~)"
+
+done | column -ts':' -o'  ' | menu -p mount | {
+    read -r NAME _
+    eval "$(lsblk -Polabel "/dev/$NAME")"
+    mkdir -p "$(d)"
+    sudo mount -o "umask=000" "/dev/$NAME" "$(d)"
+    notify-send summary "<span color='#$green'>$NAME: $LABEL</span>\n$(d \~)"
+}

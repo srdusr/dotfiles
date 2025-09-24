@@ -1,0 +1,79 @@
+#!/bin/bash
+
+### VARIABLES
+
+POLL_INTERVAL=120 # seconds at which to check battery level
+LAST_NOTIFIED=-1  # track last notified battery percentage to avoid repeated notifications
+
+# If BAT0 doesn't work for you, check available devices with:
+#   $ ls -1 /sys/class/power_supply/
+BAT_PATH=/sys/class/power_supply/BAT0
+BAT_STAT=$BAT_PATH/status
+
+if [[ -f $BAT_PATH/charge_full ]]; then
+  BAT_FULL=$BAT_PATH/charge_full
+  BAT_NOW=$BAT_PATH/charge_now
+elif [[ -f $BAT_PATH/energy_full ]]; then
+  BAT_FULL=$BAT_PATH/energy_full
+  BAT_NOW=$BAT_PATH/energy_now
+else
+  exit
+fi
+
+kill_running() {
+  local mypid=$$
+  local pids
+  mapfile -t pids < <(pgrep -f "${0##*/}")
+
+  for pid in "${pids[@]}"; do
+    if [[ $pid -ne $mypid ]]; then
+      kill "$pid"
+      sleep 1
+    fi
+  done
+}
+
+get_battery_icon() {
+  local percent=$1
+  if ((percent > 80)); then
+    echo "🔋" # Full battery
+  elif ((percent > 60)); then
+    echo "🔋" # High battery
+  elif ((percent > 40)); then
+    echo "🔋" # Medium battery
+  elif ((percent > 20)); then
+    echo "🪫" # Low battery
+  else
+    echo "⚠️" # Critical battery
+  fi
+}
+
+# Run only if battery is detected
+if ls -1qA /sys/class/power_supply/ | grep -q BAT; then
+
+  kill_running
+
+  while true; do
+    bf=$(cat "$BAT_FULL")
+    bn=$(cat "$BAT_NOW")
+    bs=$(cat "$BAT_STAT")
+
+    bat_percent=$((100 * $bn / $bf))
+    bat_icon=$(get_battery_icon "$bat_percent")
+
+    # Notify only at exact levels: 20%, 15%, and 10%
+    if [[ ($bat_percent -eq 20 || $bat_percent -eq 15 || $bat_percent -eq 10) && "$bs" = "Discharging" && $bat_percent -ne $LAST_NOTIFIED ]]; then
+      notify-send --urgency=critical "$bat_icon $bat_percent% : $([[ $bat_percent -eq 10 ]] && echo 'Critical Battery! Shutting down in 1 minute...' || echo 'Low Battery!')"
+      LAST_NOTIFIED=$bat_percent
+
+      if [[ $bat_percent -eq 10 ]]; then
+        sleep 60
+        shutdown now
+      fi
+    elif [[ "$bs" = "Charging" ]]; then
+      LAST_NOTIFIED=-1
+    fi
+
+    sleep "$POLL_INTERVAL"
+  done
+fi
