@@ -1,6 +1,7 @@
 # Dotfiles Management System
 if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
-    # Core git wrapper with repository as work-tree
+
+    # Core git wrapper - .cfg is bare repo, work-tree points to .cfg itself
     _config() {
         git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
     }
@@ -68,6 +69,10 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 esac
                 ;;
 
+            # Common scripts → ~/.scripts
+            common/scripts/*)
+                echo "$HOME/.scripts/${repo_path#common/scripts/}"
+                ;;
             # Common assets → stay in repo
             common/assets/*)
                 echo "$HOME/.cfg/$repo_path"
@@ -118,6 +123,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     config() {
         local cmd="$1"; shift
         local target_dir=""
+
         # Parse optional --target flag for add
         if [[ "$cmd" == "add" ]]; then
             while [[ "$1" == --* ]]; do
@@ -137,7 +143,29 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         case "$cmd" in
             add)
                 local file_path
-                for file_path in "$@"; do
+                local git_opts=()
+                local files=()
+
+                # Parse arguments
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --target|-t)
+                            target_dir="$2"
+                            shift 2
+                            ;;
+                        -*)  # Any other flags are git flags
+                            git_opts+=("$1")
+                            shift
+                            ;;
+                        *)   # Anything else is a file
+                            files+=("$1")
+                            shift
+                            ;;
+                    esac
+                done
+
+                # Process each file
+                for file_path in "${files[@]}"; do
                     local repo_path
                     if [[ -n "$target_dir" ]]; then
                         local rel_path
@@ -155,11 +183,13 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     mkdir -p "$(dirname "$full_repo_path")"
                     cp -a "$file_path" "$full_repo_path"
 
-                    git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" add "$repo_path"
+                    # Only git flags + repo_path go to git
+                    _config add "${git_opts[@]}" "$repo_path"
 
                     echo "Added: $file_path -> $repo_path"
                 done
                 ;;
+
             rm)
                 local rm_opts=""
                 local file_path_list=()
@@ -185,11 +215,13 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     echo "Removed: $file_path"
                 done
                 ;;
+
             sync)
                 local direction="${1:-to-repo}"; shift
                 _config ls-files | while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
+
                     if [[ "$direction" == "to-repo" ]]; then
                         if [[ -e "$sys_file" && -n "$(diff "$full_repo_path" "$sys_file" 2>/dev/null || echo "diff")" ]]; then
                             cp -a "$sys_file" "$full_repo_path"
@@ -210,18 +242,36 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     fi
                 done
                 ;;
+
             status)
+                # Check for missing files and auto-sync existing ones
                 local auto_synced=()
+                local missing_files=()
+
                 while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
                     local full_repo_path="$HOME/.cfg/$repo_file"
-                    if [[ -e "$sys_file" && -e "$full_repo_path" ]]; then
+
+                    if [[ ! -e "$full_repo_path" ]]; then
+                        missing_files+=("$repo_file")
+                    elif [[ -e "$sys_file" ]]; then
                         if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
                             cp -fa "$sys_file" "$full_repo_path"
                             auto_synced+=("$repo_file")
                         fi
                     fi
                 done < <(_config ls-files)
+
+                # Report missing files
+                if [[ ${#missing_files[@]} -gt 0 ]]; then
+                    echo "=== Missing Files (consider removing from git) ==="
+                    for repo_file in "${missing_files[@]}"; do
+                        echo "missing: $repo_file"
+                    done
+                    echo
+                fi
+
+                # Report auto-synced files
                 if [[ ${#auto_synced[@]} -gt 0 ]]; then
                     echo "=== Auto-synced Files ==="
                     for repo_file in "${auto_synced[@]}"; do
@@ -229,13 +279,79 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     done
                     echo
                 fi
+
                 _config status
-                echo
                 ;;
-            deploy)
+
+            clean-missing)
+                echo "Removing missing files from git index..."
+                local removed_count=0
+                while read -r repo_file; do
+                    local full_repo_path="$HOME/.cfg/$repo_file"
+                    if [[ ! -e "$full_repo_path" ]]; then
+                        _config rm --cached "$repo_file"
+                        echo "Removed from git: $repo_file"
+                        ((removed_count++))
+                    fi
+                done < <(_config ls-files)
+                echo "Removed $removed_count missing files from git index."
+                ;;
+
+            move-files)
+                # Move files from one path pattern to another in the repository
+                local from_pattern="$1"
+                local to_pattern="$2"
+
+                if [[ -z "$from_pattern" || -z "$to_pattern" ]]; then
+                    echo "Usage: config move-files <from_pattern> <to_pattern>"
+                    echo "Example: config move-files 'common/nvim' 'common/config/nvim'"
+                    return 1
+                fi
+
+                echo "Moving files from $from_pattern to $to_pattern..."
+                local moved_count=0
+
+                # Find all files matching the from_pattern
+                _config ls-files | grep "^$from_pattern/" | while read -r repo_file; do
+                    local new_repo_file="${repo_file/$from_pattern/$to_pattern}"
+                    local old_full_path="$HOME/.cfg/$repo_file"
+                    local new_full_path="$HOME/.cfg/$new_repo_file"
+
+                    # Create destination directory
+                    mkdir -p "$(dirname "$new_full_path")"
+
+                    # Move the file in the filesystem if it exists
+                    if [[ -e "$old_full_path" ]]; then
+                        mv "$old_full_path" "$new_full_path"
+                        echo "Moved: $repo_file -> $new_repo_file"
+                    else
+                        # File doesn't exist, but we still need to update git index
+                        # Try to get it from the system location first
+                        local sys_file="$(_sys_path "$repo_file")"
+                        if [[ -e "$sys_file" ]]; then
+                            cp -a "$sys_file" "$new_full_path"
+                            echo "Copied from system: $sys_file -> $new_repo_file"
+                        else
+                            echo "Warning: Neither repo nor system file exists for $repo_file"
+                            continue
+                        fi
+                    fi
+
+                    # Update git index
+                    _config rm --cached "$repo_file" 2>/dev/null || true
+                    _config add "$new_repo_file"
+
+                    ((moved_count++))
+                done
+
+                echo "Moved $moved_count files from $from_pattern to $to_pattern"
+                ;;
+
+            deploy|checkout)
+                echo "Deploying dotfiles from .cfg..."
                 _config ls-files | while read -r repo_file; do
                     local full_repo_path="$HOME/.cfg/$repo_file"
-                    local sys_file="$(_sys_path "$repo_file")"  # destination only
+                    local sys_file="$(_sys_path "$repo_file")"
 
                     # Only continue if the source exists
                     if [[ -e "$full_repo_path" && -n "$sys_file" ]]; then
@@ -255,29 +371,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                     fi
                 done
                 ;;
-            checkout)
-                echo "Checking out dotfiles from .cfg..."
-                _config ls-files | while read -r repo_file; do
-                    local full_repo_path="$HOME/.cfg/$repo_file"
-                    local sys_file="$(_sys_path "$repo_file")"
 
-                    if [[ -e "$full_repo_path" && -n "$sys_file" ]]; then
-                        local dest_dir
-                        dest_dir="$(dirname "$sys_file")"
-
-                        # Create destination if it doesn't exist
-                        if [[ "$sys_file" == /* && "$sys_file" != "$HOME/"* ]]; then
-                            _sudo_prompt mkdir -p "$dest_dir"
-                            _sudo_prompt cp -a "$full_repo_path" "$sys_file"
-                        else
-                            mkdir -p "$dest_dir"
-                            cp -a "$full_repo_path" "$sys_file"
-                        fi
-
-                        echo "Checked out: $repo_file -> $sys_file"
-                    fi
-                done
-                ;;
             backup)
                 local timestamp=$(date +%Y%m%d%H%M%S)
                 local backup_dir="$HOME/.dotfiles_backup/$timestamp"
@@ -293,12 +387,14 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 done
                 echo "Backup complete. To restore, copy files from $backup_dir to their original locations."
                 ;;
+
             *)
                 _config "$cmd" "$@"
                 ;;
         esac
     }
 fi
+
 
 # Make SUDO_ASKPASS agnostic: pick the first available askpass binary.
 # You can predefine SUDO_ASKPASS env var to force a particular path.
