@@ -1,0 +1,65 @@
+#!/bin/bash
+
+SCRATCHPAD_CLASSES=("scratchpad" "pack" "heads-up-display")
+PRIMARY_MONITOR="eDP-1"
+SECOND_MONITOR="HDMI-A-2"
+
+PRIMARY_WORKSPACES=(2 4 5 6)
+SECOND_WORKSPACES=(1 3)
+
+# Check if second monitor exists
+if ! hyprctl monitors -j | jq -e ".[] | select(.name == \"$SECOND_MONITOR\")" >/dev/null; then
+  # No second monitor, do nothing
+  exit 0
+fi
+
+# Check if list of workspaces has any windows
+has_windows_in_workspaces() {
+  local workspaces=("$@")
+  for ws in "${workspaces[@]}"; do
+    local count
+    count=$(hyprctl clients -j | jq "[.[] | select(.workspace.id == $ws)] | length")
+    if ((count > 0)); then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Check window presence
+primary_has_windows=false
+second_has_windows=false
+
+if has_windows_in_workspaces "${PRIMARY_WORKSPACES[@]}"; then
+  primary_has_windows=true
+fi
+if has_windows_in_workspaces "${SECOND_WORKSPACES[@]}"; then
+  second_has_windows=true
+fi
+
+# Decide target monitor
+if [[ "$primary_has_windows" == true && "$second_has_windows" == false ]]; then
+  TARGET_MONITOR="$SECOND_MONITOR"
+elif [[ "$primary_has_windows" == false && "$second_has_windows" == true ]]; then
+  TARGET_MONITOR="$PRIMARY_MONITOR"
+else
+  TARGET_MONITOR="$SECOND_MONITOR" # both busy or both empty → second monitor
+fi
+
+# Get workspace id of the target monitor
+TARGET_WORKSPACE=$(hyprctl monitors -j | jq ".[] | select(.name == \"$TARGET_MONITOR\") | .activeWorkspace.id")
+
+# Wait for scratchpad window to appear and move it
+for _ in {1..20}; do
+  for class in "${SCRATCHPAD_CLASSES[@]}"; do
+    client=$(hyprctl clients -j | jq -r ".[] | select(.class == \"$class\") | .address")
+    if [[ -n "$client" ]]; then
+      hyprctl dispatch movetoworkspacesilent "$TARGET_WORKSPACE,address:$client"
+      hyprctl dispatch focuswindow address:"$client"
+      exit 0
+    fi
+  done
+  sleep 0.1
+done
+
+exit 1

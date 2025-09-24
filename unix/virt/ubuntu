@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+
+# Set variables
+HOST_DIR="$HOME/virt"
+VM_DIR="$HOME/virt/machines"
+IMAGE_DIR="$HOME/virt/images"
+SOCKET_DIR="$VM_DIR"
+
+BASE_NAME=$(basename "$0" .sh | sed 's/[0-9]*$//')
+VM_INDEX=$(basename "$0" .sh | grep -o '[0-9]*$')
+VM_INDEX=${VM_INDEX:-1}  # default to 1 if no number
+
+VM_NAME="${BASE_NAME}${VM_INDEX}"
+QCOW2_FILE="$VM_DIR/$VM_NAME.qcow2"
+
+# If the file exists, use it
+if [[ -f "$QCOW2_FILE" ]]; then
+    echo "Using existing VM image: $QCOW2_FILE"
+else
+    # Loop to find first available index if not
+    while [[ -f "$QCOW2_FILE" ]]; do
+        ((VM_INDEX++))
+        VM_NAME="${BASE_NAME}${VM_INDEX}"
+        QCOW2_FILE="$VM_DIR/$VM_NAME.qcow2"
+    done
+    echo "Creating new VM image: $QCOW2_FILE"
+    qemu-img create -f qcow2 "$QCOW2_FILE" "$VM_SIZE" || {
+        echo "Error: Failed to create qcow2 image!" >&2
+        exit 1
+    }
+fi
+
+#ISO_FILE=$(ls -1t "$IMAGE_DIR"/ubuntu-*-desktop-*-amd64.iso 2>/dev/null | head -n1)
+#if [[ -z "$ISO_FILE" ]]; then
+#    echo "Error: No Ubuntu ISO found in $IMAGE_DIR" >&2
+#    exit 1
+#fi
+#echo "Using ISO: $ISO_FILE"
+
+# Directory to remember ISO choices
+CHOICES_DIR="$VM_DIR/.iso_choices"
+mkdir -p "$CHOICES_DIR"
+
+CHOICE_FILE="$CHOICES_DIR/$BASE_NAME.choice"
+
+if [[ -f "$CHOICE_FILE" ]]; then
+    # Already have a saved ISO for this VM
+    ISO_FILE=$(<"$CHOICE_FILE")
+    echo "Using previously selected ISO: $ISO_FILE"
+else
+    # List all ISO files newest first
+    mapfile -t ISO_LIST < <(ls -1t "$IMAGE_DIR"/*.iso 2>/dev/null)
+    if [[ ${#ISO_LIST[@]} -eq 0 ]]; then
+        echo "Error: No ISO files found in $IMAGE_DIR" >&2
+        exit 1
+    fi
+
+    echo "Available ISOs:"
+    PS3="Select an ISO to boot (default: 1): "
+    select ISO_FILE in "${ISO_LIST[@]}"; do
+        ISO_FILE=${ISO_FILE:-${ISO_LIST[0]}}
+        echo "Using ISO: $ISO_FILE"
+        # Save choice so we don’t ask again
+        echo "$ISO_FILE" > "$CHOICE_FILE"
+        break
+    done
+fi
+
+QCOW2_FILE="$VM_DIR/$VM_NAME.qcow2"
+GUEST_PORT=22
+SHARED_DIR="$HOST_DIR/shared"
+VM_SIZE="60G" # Disk size in GB
+VM_RAM="8G"   # RAM size
+VM_CPU="6"    # Number of virtual CPUs
+CORES=$((VM_CPU / 2))
+THREADS_PER_CORE=2
+SOCKETS=1
+SHARED_DIR="$HOST_DIR/shared"
+FIRMWARE_DIR="$HOST_DIR/firmware"
+
+SMP_CONFIG="cores=$CORES,threads=$THREADS_PER_CORE,sockets=$SOCKETS"
+
+# Set SPICE_NOGRAB environment variable
+export SPICE_NOGRAB=1
+
+# Try to find an available host port starting from 22220
+HOST_PORT_START=22220
+HOST_PORT_END=22300
+
+for ((port = HOST_PORT_START; port <= HOST_PORT_END; port++)); do
+    if ! ss -tuln | grep -q ":$port\b"; then
+        HOST_PORT=$port
+        echo "Using available port: $HOST_PORT"
+        break
+    fi
+done
+
+if [[ $port -gt $HOST_PORT_END ]]; then
+    echo "Error: No available ports found between $HOST_PORT_START and $HOST_PORT_END" >&2
+    exit 1
+fi
+
+# Ensure necessary directories exist
+mkdir -p "$HOST_DIR"
+mkdir -p "$VM_DIR" "$IMAGE_DIR" "$SHARED_DIR" "$FIRMWARE_DIR"
+
+# Locate OVMF firmware files
+OVMF_DIRS=(
+    "/usr/share/OVMF"
+    "/usr/share/qemu"
+    "/usr/lib/qemu"
+    "/usr/share/edk2"
+    "/usr/lib/edk2"
+)
+
+OVMF_CODE=""
+OVMF_VARS=""
+
+for dir in "${OVMF_DIRS[@]}"; do
+    [[ -z "$OVMF_CODE" ]] && OVMF_CODE=$(find "$dir" -type f -name "OVMF_CODE.fd" -o -name "edk2-x86_64-code.fd" 2>/dev/null | head -n 1)
+    [[ -z "$OVMF_VARS" ]] && OVMF_VARS=$(find "$dir" -type f -name "OVMF_VARS.fd" 2>/dev/null | head -n 1)
+    [[ -n "$OVMF_CODE" && -n "$OVMF_VARS" ]] && break
+done
+
+# Ensure a writable copy of OVMF_VARS.fd
+OVMF_VARS="$IMAGE_DIR/OVMF_VARS.fd"
+
+if [[ ! -f "$OVMF_VARS" ]]; then
+    echo "Copying OVMF_VARS.fd to $OVMF_VARS"
+    cp /usr/share/edk2/OvmfX64/OVMF_VARS.fd "$OVMF_VARS" 2>/dev/null || {
+        echo "Error: Failed to copy OVMF_VARS.fd!" >&2
+        exit 1
+    }
+fi
+
+# Check if required files exist
+if [[ -z "$OVMF_CODE" ]]; then
+    echo "Error: OVMF_CODE.fd not found!" >&2
+    exit 1
+fi
+if [[ ! -f "$OVMF_VARS" ]]; then
+    echo "Error: OVMF_VARS.fd not found or could not be copied!" >&2
+    exit 1
+fi
+if [[ ! -f "$ISO_FILE" ]]; then
+    echo "Warning: $ISO_FILE ISO not found at $IMAGE_DIR"
+fi
+
+# Check if the qcow2 image file exists; if not, create it
+if [[ ! -f "$QCOW2_FILE" ]]; then
+    echo "Creating $QCOW2_FILE with a size of $VM_SIZE"
+    qemu-img create -f qcow2 "$QCOW2_FILE" "$VM_SIZE" || {
+        echo "Error: Failed to create qcow2 image!" >&2
+        exit 1
+    }
+else
+    echo ""
+fi
+
+# Run QEMU
+/sbin/qemu-system-x86_64 \
+    -name "$VM_NAME",process="$VM_NAME" \
+    -machine q35,smm=off,vmport=off,accel=kvm \
+    -enable-kvm \
+    -global kvm-pit.lost_tick_policy=discard \
+    -cpu host \
+    -smp "$SMP_CONFIG" \
+    -m "$VM_RAM" \
+    -device virtio-balloon \
+    -pidfile "$VM_DIR/$VM_NAME.pid" \
+    -rtc base=utc,clock=host \
+    -vga none \
+    -device virtio-vga-gl,xres=1280,yres=800 \
+    -display sdl,gl=on \
+    -device virtio-rng-pci,rng=rng0 \
+    -device virtio-serial \
+    -object rng-random,id=rng0,filename=/dev/urandom \
+    -device qemu-xhci,id=spicepass \
+    -chardev spicevmc,id=usbredirchardev1,name=usbredir \
+    -device usb-redir,chardev=usbredirchardev1,id=usbredirdev1 \
+    -chardev spicevmc,id=usbredirchardev2,name=usbredir \
+    -device usb-redir,chardev=usbredirchardev2,id=usbredirdev2 \
+    -chardev spicevmc,id=usbredirchardev3,name=usbredir \
+    -device usb-redir,chardev=usbredirchardev3,id=usbredirdev3 \
+    -device pci-ohci,id=smartpass \
+    -device usb-ccid \
+    -device usb-ehci,id=input \
+    -device usb-kbd,bus=input.0 \
+    -k en-us \
+    -device usb-tablet,bus=input.0 \
+    -audiodev pipewire,id=audio0 \
+    -device intel-hda \
+    -device hda-micro,audiodev=audio0 \
+    -device virtio-net,netdev=nic \
+    -netdev user,hostname="$VM_NAME",hostfwd=tcp::"$HOST_PORT"-:"$GUEST_PORT",id=nic \
+    -device virtio-9p-pci,fsdev=fsdev0,mount_tag="Public-$(whoami)" \
+    -global driver=cfi.pflash01,property=secure,value=on \
+    -drive if=pflash,format=raw,unit=0,file="$OVMF_CODE",readonly=on \
+    -drive if=pflash,format=raw,unit=1,file="$OVMF_VARS" \
+    -drive media=cdrom,index=0,file="$ISO_FILE" \
+    -device virtio-blk-pci,drive=SystemDisk \
+    -drive id=SystemDisk,if=none,format=qcow2,file="$QCOW2_FILE" \
+    -fsdev local,id=fsdev0,path="$SHARED_DIR",security_model=mapped-xattr \
+    -monitor unix:"$SOCKET_DIR/$VM_NAME-monitor.socket",server,nowait \
+    -serial unix:"$SOCKET_DIR/$VM_NAME-serial.socket",server,nowait
+
+#-display sdl,gl=on \
+#-display gtk,gl=on \
+#-display gtk,grab-on-hover=on,grab-mod=none \
+#-qmp unix:/tmp/qmp-sock,server,nowait \
+#-qmp unix:"$SOCKET_DIR/$VM_NAME-qmp.socket",server,nowait \
+#-chardev socket,path="$VM_DIR/$VM_NAME-qga.sock",server=on,wait=off,id=qga0 \
+
+# Network Isolation:
+#-netdev user,hostname="$VM_NAME",restrict=yes,id=nic \
+
+# No file-sharing:
+#-netdev user,hostname="$VM_NAME",hostfwd=tcp::"$HOST_PORT"-:"$GUEST_PORT",id=nic \
+
+# File-sharing and networking:
+#-netdev user,hostname="$VM_NAME",hostfwd=tcp::"$HOST_PORT"-:"$GUEST_PORT",smb="$SHARED_DIR",id=nic \
+#-device virtio-9p-pci,fsdev=fsdev0,mount_tag="Public-$(whoami)" \

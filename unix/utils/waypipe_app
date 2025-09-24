@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Usage: ./waypipe_app user@remote <app>
+# Example: ./waypipe_app user@remote gedit
+
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 user@remote <app> [args...]"
+    exit 1
+fi
+
+REMOTE=$1
+shift
+APP="$@"
+
+# Run the app remotely, forward display over SSH with waypipe
+waypipe ssh "$REMOTE" $APP

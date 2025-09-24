@@ -1,0 +1,47 @@
+#!/bin/bash
+
+#Sext (Shutdown Exit)
+# List of package managers to check for
+package_managers=("emerge" "apt" "dnf" "pacman" "zypper")
+
+# Set how often to check (in seconds)
+check_interval=30
+
+# Check if any package manager is running
+is_package_manager_running() {
+  for pm in "${package_managers[@]}"; do
+    if pgrep -x "$pm" >/dev/null; then
+      return 0 # Return 0 (true) if any package manager is running
+    fi
+  done
+  return 1 # Return 1 (false) if no package manager is running
+}
+
+# Safely shutdown the system
+safe_shutdown() {
+  # Try using shutdown without sudo first
+  if shutdown -h now; then
+    echo "Shutdown initiated successfully using 'shutdown'."
+    # If shutdown fails, try using poweroff
+  elif poweroff; then
+    echo "Shutdown initiated successfully using 'poweroff'."
+    # If poweroff fails, try using sudo poweroff
+  elif sudo poweroff; then
+    echo "Shutdown initiated successfully with 'sudo poweroff'."
+    # If both shutdown and poweroff fail, try with sudo shutdown
+  elif sudo shutdown -h now; then
+    echo "Shutdown initiated successfully with 'sudo shutdown'."
+  else
+    echo "Shutdown command failed. Please check your system configuration."
+  fi
+}
+
+# Loop until no package manager process is running
+while is_package_manager_running; do
+  echo "Package manager is still running. Checking again in $check_interval seconds..."
+  sleep "$check_interval"
+done
+
+# Once the process completes, initiate a safe shutdown
+echo "Package manager has finished. Attempting to shutdown..."
+safe_shutdown

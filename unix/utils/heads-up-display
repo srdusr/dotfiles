@@ -1,0 +1,88 @@
+#!/bin/sh
+
+# Created By: srdusr
+# Created On: Wed 05 Feb 2023 01:24:37 AM CAT
+# Project: bspwm scratchpad (Heads-Up-Display) with tmux session
+
+### Alternative method
+
+#if id="$(xdo id -N heads-up-display)"; then
+#    bspc node "$id" -g hidden -f
+#else
+#    #kitty --class "heads-up-display" -e tmux new-session -A -s HUD -e bash >/dev/null 2>&1 &
+#    wezterm start --class "heads-up-display" -e tmux new-session -A -s HUD -e bash >/dev/null 2>&1 &
+#fi
+
+#- - - - - - - - - -
+
+### Alternative method
+
+#id=$(xdotool search --class heads-up-display)
+#if [ "$id" = "" ]; then
+#    #kitty --class "Heads-Up-Display" -e tmux new-session -A -s HUD -e bash > /dev/null 2>&1 &
+#    alacritty --class "heads-up-display" -e tmux new-session -A -s HUD -e bash >/dev/null 2>&1 &
+#else
+#    if [ ! -f /tmp/hide_hud ]; then
+#        touch /tmp/hide_hud && xdo hide "$id"
+#    elif [ -f /tmp/hide_hud ]; then
+#        rm /tmp/hide_hud && xdo show "$id"
+#    fi
+#fi
+
+
+
+# Set the environment variables to x11 to allow working in Wayland
+export GDK_BACKEND=x11
+export QT_QPA_PLATFORM=xcb
+#export WAYLAND_DISPLAY=""
+export WINIT_UNIX_BACKEND=x11
+
+# Supported terminals and dropdown class
+supported_terminals=("wezterm" "kitty" "alacritty")
+
+# Check if any supported terminal with scratchpad class is running
+for term in "${supported_terminals[@]}"; do
+    if pgrep -f "$term.*--class heads-up-display" >/dev/null; then
+        my_term="$term"
+        break
+    fi
+done
+
+# If no supported terminal is running, start the first available one
+if [ "$my_term" = "" ]; then
+    for term in "${supported_terminals[@]}"; do
+        if command -v "$term" >/dev/null 2>&1; then
+            my_term="$term"
+            break
+        fi
+    done
+    if [ "$my_term" = "" ]; then
+        echo "No supported terminal found." && exit 1
+    fi
+
+    # Start terminal with scratchpad class
+    case "$my_term" in
+        "wezterm") wezterm start --class heads-up-display -e tmux new-session -A -s HUD -e bash htop & ;;
+        "kitty") kitty --class heads-up-display tmux new-session -A -s HUD -e bash htop & ;;
+        "alacritty") alacritty --class heads-up-display -e tmux new-session -A -s HUD -e bash htop & ;;
+
+    esac
+fi
+
+# Get the window ID of the scratchpad terminal
+id="$(xdo id -N heads-up-display)"
+
+# Toggle scratchpad terminal visibility
+if [ "$id" != "" ]; then
+    if xwininfo -id "$id" | grep "Map State: IsViewable" >/dev/null; then
+        # Scratchpad is visible, hide it
+        dimensions="$(xwininfo -id "$id" | awk '/Width:|Height:/ { printf("%s=%s;", tolower($1), $2) }')"
+        xdo hide "$id" 2>/dev/null
+    else
+        # Scratchpad is hidden, show it and restore dimensions
+        xdo show "$id"
+        xdotool windowsize "$id" "$(echo "$dimensions" | tr ';' ' ')" 2>/dev/null
+        xdotool windowactivate "$id"
+        xdotool windowfocus "$id"
+    fi
+fi
