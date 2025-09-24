@@ -49,6 +49,12 @@ Linux:
 **Linux/macOS:**
 ```sh
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh)"
+
+# or
+
+curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh -o install.sh
+chmod +x install.sh
+./install.sh
 ```
 
 **Windows PowerShell:**
