@@ -1,4 +1,10 @@
-local dap = require("dap")
+local M = {}
+
+function M.setup()
+  local ok, dap = pcall(require, "dap")
+  if not ok or not dap then
+    return false
+  end
 
 -- options
 dap.defaults.fallback.switchbuf = "uselast"
@@ -155,11 +161,12 @@ local dapui = require("dapui")
 --})
 
 -- Load dapui configuration only if it hasn't been loaded before
-if not vim.g.loaded_dapui then
-  require("dapui").setup({
-    mappings = {
-      expand = "<CR>",
-      open = "o",
+  local dapui_ok, dapui = pcall(require, "dapui")
+  if dapui_ok and dapui then
+    dapui.setup({
+      mappings = {
+        expand = "<CR>",
+        open = "o",
       remove = "D",
       edit = "e",
       repl = "r",
@@ -240,14 +247,19 @@ end
 require("nvim-dap-virtual-text").setup({
   enabled = true,
   enabled_commands = true,
-  highlight_changed_variables = true,
-  highlight_new_as_changed = false,
-  show_stop_reason = true,
-  commented = true,
-  only_first_definition = true,
-  all_references = false,
-  filter_references_pattern = "<module",
-  virt_text_pos = "eol",
-  all_frames = false,
-  virt_text_win_col = nil,
-})
+    highlight_changed_variables = true,
+    highlight_new_as_changed = false,
+    show_stop_reason = true,
+    commented = true,
+    only_first_definition = true,
+    all_references = false,
+    filter_references_pattern = "<module",
+    virt_text_pos = "eol",
+    all_frames = false,
+    virt_text_win_col = nil,
+  })
+  
+  return true
+end
+
+return M

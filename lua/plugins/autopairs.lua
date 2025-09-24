@@ -1,9 +1,16 @@
-local status_ok, autopairs = pcall(require, "nvim-autopairs")
-if not status_ok then
-  return
-end
+local M = {}
 
-autopairs.setup({
+--- Setup and configure nvim-autopairs
+-- This function initializes and configures the autopairs plugin
+-- @return boolean True if setup was successful, false otherwise
+function M.setup()
+  local ok, autopairs = pcall(require, "nvim-autopairs")
+  if not ok then
+    return false
+  end
+  
+  -- Configure autopairs
+  autopairs.setup({
   check_ts = true,
   ts_config = {
     lua = { "string", "source" },
@@ -85,3 +92,8 @@ cmp.event:on(
 --  return
 --end
 --cmp.event:on("confirm_done", cmp_autopairs.on_confirm_done { map_char = { tex = "" } })
+
+  return true
+end
+
+return M

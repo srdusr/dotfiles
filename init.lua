@@ -5,43 +5,14 @@
               ██║╚██╗██║██╔══╝  ██║   ██║╚██╗ ██╔╝██║██║╚██╔╝██║
               ██║ ╚████║███████╗╚██████╔╝ ╚████╔╝ ██║██║ ╚═╝ ██║
               ╚═╝  ╚═══╝╚══════╝ ╚═════╝   ╚═══╝  ╚═╝╚═╝     ╚═╝
-              " ------------------------------------------------
-              Author: srdusr
-               Email: trevorgray@srdusr.com
-                 Url: https://github.com/srdusr/nvim.git
-              ------------------------------------------------ "
+ ------------------------------------------------------------------------------
+ Author      : srdusr
+ URL         : https://github.com/srdusr/nvim.git
+ Description : System-agnostic, backwards-compatible config.
+               Bootstraps packer/lazy/builtin based on availability.
+               Use :PackerSync, :Lazy install, or built-in (v0.12+).
+ ------------------------------------------------------------------------------
 --]]
---[[init.]]
--- ========================================================================== --
--- ==                            DEPENDENCIES                              == --
--- ========================================================================== --
-
--- ripgrep    - https://github.com/BurntSushi/ripgrep
--- fd         - https://github.com/sharkdp/fd
--- git        - https://git-scm.com/
--- make       - https://www.gnu.org/software/make/
--- c compiler - gcc or tcc or zig
-
--- -------------------------------------------------------------------------- --
-
--- ================================== --
--- ==    Install neovim-nightly    == --
--- ================================== --
-
--- Download nvim-linux64.tar.gz:
---$ curl -L -o nvim-linux64.tar.gz https://github.com/neovim/neovim/releases/download/nightly/nvim-linux64.tar.gz
--- Extract:
---$ tar xzvf nvim-linux64.tar.gz --install-dir=/bin
--- Run:
---$ ./nvim-linux64/bin/nvim
-
--- ---------------------------------- --
-
--- Initialize config with this one liner in the terminal
---$ nvim --headless -c 'call mkdir(stdpath("config"), "p") | exe "edit" stdpath("config") . "/init.lua" | write | quit'
-
--- Command to see startup time
---$ nvim --startuptime startup.log -c exit && tail -100 startup.log
 
 -- Load impatient (Faster loading times)
 local impatient_ok, impatient = pcall(require, "impatient")
@@ -55,60 +26,6 @@ vim.schedule(function()
   vim.opt.shadafile = ""
   vim.cmd("silent! rsh")
 end)
-
--- Load/reload modules
-local modules = {
-  "user.pack", -- Packer plugin manager
-  "user.opts", -- Options
-  "user.keys", -- Keymaps
-  "user.mods", -- Modules/functions
-  "user.view", -- Colorscheme/UI
-  "plugins.web-devicons",
-  "plugins.treesitter",
-  "plugins.neodev",
-  "plugins.telescope",
-  "plugins.nvim-tree",
-  "plugins.lsp",
-  "plugins.cmp",
-  "plugins.quickfix",
-  --"plugins.snippets",
-  --"plugins.colorizer",
-  --"plugins.prettier",
-  --"plugins.git",
-  --"plugins.fugitive",
-  "plugins.gitsigns",
-  "plugins.sniprun",
-  "plugins.session",
-  "plugins.surround",
-  "plugins.neoscroll",
-  "plugins.statuscol",
-  "plugins.trouble",
-  "plugins.goto-preview",
-  "plugins.autopairs",
-  "plugins.navic",
-  "plugins.toggleterm",
-  "plugins.zen-mode",
-  "plugins.fidget",
-  "plugins.dap",
-  "plugins.neotest",
-  "plugins.heirline",
-  "plugins.dashboard",
-  "plugins.which-key",
-  "plugins.harpoon",
-  "plugins.leetcode",
-  "plugins.hardtime",
-  "plugins.notify",
-  "plugins.overseer",
-  "plugins.vimtex",
-  "plugins.indent-blankline",
-  --"plugins.modify-blend",
-}
-
--- Refresh module cache
-for k, v in pairs(modules) do
-  package.loaded[v] = nil
-  require(v)
-end
 
 -- Improve speed by disabling some default plugins/modules
 local builtins = {
@@ -126,24 +43,110 @@ local builtins = {
   --"matchparen",
   "logiPat",
   "rrhelper",
-  "netrw",
-  "netrwPlugin",
-  "netrwSettings",
-  "netrwFileHandlers",
   "tutor_mode_plugin",
-  "fzf",
   "spellfile_plugin",
   "sleuth",
+  "fzf",
 }
+
+local enable_netrw = true
+local ok, _ = pcall(require, "nvim-tree")
+if ok then
+  enable_netrw = false
+end
+
+if not enable_netrw then
+  vim.g.loaded_netrw = 1
+  vim.g.loaded_netrwPlugin = 1
+  vim.g.loaded_netrwSettings = 1
+  vim.g.loaded_netrwFileHandlers = 1
+end
 
 for _, plugin in ipairs(builtins) do
   vim.g["loaded_" .. plugin] = 1
 end
-vim.g.do_filetype_lua = 1
-vim.g.did_load_filetypes = 0
 
--- Snippets
---vim.g.snippets = 'luasnip'
 
--- Notifications
-vim.notify = require("notify") -- Requires plugin "rcarriga/nvim-notify"
+-- Load/reload modules
+local modules = {
+  -- SETUP/MANAGER --
+  "setup.compat",  -- Backwards compatibility/future proofing
+  "setup.manager", -- Package Manager (builtin/packer/lazy)
+  "setup.plugins", -- Plugins list
+
+  -- USER/CORE --
+  "user.keys", -- Keymaps
+  "user.mods", -- Modules/functions
+  "user.opts", -- Options
+  "user.view", -- Colorscheme/UI
+
+  -- PLUGINS --
+  "plugins.auto-session",
+  "plugins.treesitter",
+  "plugins.web-devicons",
+  "plugins.telescope",
+  "plugins.fzf",
+  "plugins.nvim-tree",
+  "plugins.neodev",
+  "plugins.lsp",
+  "plugins.cmp",
+  "plugins.quickfix",
+  "plugins.colorizer",
+  "plugins.prettier",
+  "plugins.git",
+  "plugins.fugitive",
+  "plugins.snippets",
+  "plugins.gitsigns",
+  "plugins.sniprun",
+  "plugins.surround",
+  "plugins.neoscroll",
+  "plugins.statuscol",
+  "plugins.trouble",
+  "plugins.goto-preview",
+  "plugins.autopairs",
+  "plugins.navic",
+  "plugins.toggleterm",
+  "plugins.zen-mode",
+  --"plugins.fidget",
+  "plugins.dap",
+  "plugins.neotest",
+  "plugins.heirline",
+  "plugins.indent-blankline",
+  "plugins.dashboard",
+  "plugins.which-key",
+  "plugins.harpoon",
+  "plugins.leetcode",
+  --"plugins.hardtime",
+  "plugins.notify",
+  "plugins.overseer",
+  "plugins.vimtex",
+  "plugins.interestingwords",
+
+  --"plugins.nvim-tree",
+  --"plugins.telescope",
+  --"plugins.heirline",
+  --"plugins.fzf",
+  --"",
+
+}
+
+-- Refresh module cache
+--for _, mod in ipairs(modules) do
+--  package.loaded[mod] = nil
+--  pcall(require, mod)
+--end
+
+for _, mod in ipairs(modules) do
+  local ready, loaded = pcall(require, mod)
+  if ready and type(loaded) == "table" and loaded.setup then
+    local success, err = pcall(loaded.setup)
+    if not success then
+      vim.notify(string.format("Error setting up %s: %s", mod, err), vim.log.levels.ERROR)
+    end
+  elseif not ready then
+    vim.notify(string.format("Failed to load %s: %s", mod, loaded), vim.log.levels.WARN)
+  end
+end
+
+--require("setup.manager").setup() -- Setup all managers
+--require("user.view").setup() -- Colors/UI

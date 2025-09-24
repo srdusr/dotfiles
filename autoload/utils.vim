@@ -16,26 +16,23 @@ endfunction
 "-------------------------------------------------
 
 " Toggle DiagnosticsOpenFloat
+" Enable DiagnosticsOpenFloat by default
+"let g:DiagnosticsOpenFloat = 1
+"
+"" Define the autocmd group on startup
+"augroup OpenFloat
+"    autocmd!
+"    autocmd CursorHold * lua if vim.g.DiagnosticsOpenFloat then vim.diagnostic.open_float(nil, { focusable = false }) end
+"augroup END
+
+" Toggle function
 function! utils#ToggleDiagnosticsOpenFloat()
-    " Switch the toggle variable
+    " Flip the toggle
     let g:DiagnosticsOpenFloat = !get(g:, 'DiagnosticsOpenFloat', 1)
-
-    " Reset group
-    augroup OpenFloat
-            autocmd!
-    augroup END
-
-    " Enable if toggled on
-    if g:DiagnosticsOpenFloat
-        augroup OpenFloat
-            autocmd! CursorHold * lua vim.diagnostic.open_float(nil, {focusable = false,})
-            "autocmd! CursorHold,CursorHoldI * lua vim.diagnostic.open_float(nil, {focusable = false,})
-            "autocmd! CursorHold,CursorHoldI * lua vim.diagnostic.open_float(nil, {focusable = false,}) print ("vim.diagnostic.open_float enabled...")
-        augroup END
-    endif
 endfunction
-"command! ToggleDiagonsticsOpenFloat call ToggleDiagnosticsOpenFloat()
 
+" Command to toggle
+command! ToggleDiagnosticsOpenFloat call utils#ToggleDiagnosticsOpenFloat()
 
 "-------------------------------------------------
 
@@ -78,7 +75,7 @@ endfunction
 "-------------------------------------------------
 
 " Open last closed buffer
-function! OpenLastClosed()
+function! utils#OpenLastClosed()
     let last_buf = bufname('#')
     if empty(last_buf)
         echo "No recently closed buffer found"
@@ -233,5 +230,9 @@ function! utils#RenameFile()
     endif
 endfunction
 
+augroup obsidian
+    autocmd!
+    autocmd Filetype markdown set conceallevel=2
+augroup END
 
 "-------------------------------------------------

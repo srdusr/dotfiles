@@ -1,4 +1,12 @@
-require('goto-preview').setup {
+local M = {}
+
+function M.setup()
+  local ok, gp = pcall(require, 'goto-preview')
+  if not ok or not gp then
+    return false
+  end
+
+  gp.setup {
   width = 120; -- Width of the floating window
   height = 15; -- Height of the floating window
   border = {"↖", "─" ,"┐", "│", "┘", "─", "└", "│"}; -- Border characters of the floating window
@@ -14,5 +22,10 @@ require('goto-preview').setup {
   focus_on_open = true; -- Focus the floating window when opening it.
   dismiss_on_move = false; -- Dismiss the floating window when moving the cursor.
   force_close = true, -- passed into vim.api.nvim_win_close's second argument. See :h nvim_win_close
-  bufhidden = "wipe", -- the bufhidden option to set on the floating window. See :h bufhidden
-}
+    bufhidden = "wipe", -- the bufhidden option to set on the floating window. See :h bufhidden
+  }
+  
+  return true
+end
+
+return M

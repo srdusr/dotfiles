@@ -1,120 +1,610 @@
-local lspconfig = require("lspconfig")
-local mason_lspconfig = require("mason-lspconfig")
-local null_ls = require("null-ls")
--- local lsp_lines = require('lsp_lines')
-require("mason").setup()
-require("mason-null-ls").setup({ handlers = {}, ensure_installed = nil, automatic_installation = true,
-  automatic_setup = true })
+local M = {}
 
-local keymap = vim.keymap
-local cmd = vim.cmd
+-- Safe require helper
+local function safe_require(name)
+  local ok, mod = pcall(require, name)
+  return ok and mod or nil
+end
 
-local border = { { "┌", "FloatBorder" }, { "─", "FloatBorder" }, { "┐", "FloatBorder" }, { "│", "FloatBorder" },
-  { "┘", "FloatBorder" }, { "─", "FloatBorder" }, { "└", "FloatBorder" }, { "│", "FloatBorder" } }
+-- Autocmd groups for managing event listeners
+local augroup_format = vim.api.nvim_create_augroup("LspFormattingOnSave", { clear = true })
+local augroup_diag_float = vim.api.nvim_create_augroup("ShowLineDiagnostics", { clear = true })
+local augroup_diag_load = vim.api.nvim_create_augroup("OpenDiagnosticsOnLoad", { clear = true })
+local augroup_highlight = vim.api.nvim_create_augroup("LspDocumentHighlight", { clear = true })
 
--- Set up LSP servers if not done before
-if not vim.g.lsp_setup_done then
-  -- Clear existing LSP clients
-  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    local clients = require("user.mods").get_lsp_clients(bufnr)
+-- Border for floating windows
+local border = {
+    { "┌", "FloatBorder" }, { "─", "FloatBorder" }, { "┐", "FloatBorder" },
+    { "│", "FloatBorder" }, { "┘", "FloatBorder" }, { "─", "FloatBorder" },
+    { "└", "FloatBorder" }, { "│", "FloatBorder" }
+}
 
-    for _, client in ipairs(clients) do
-      client.stop()
-    end
+-- Initialize LSP modules
+local function init_modules()
+  -- Silently try to load each module
+  M.lspconfig = safe_require("lspconfig")
+  M.mason = safe_require("mason")
+  M.mason_lspconfig = safe_require("mason-lspconfig")
+  M.mason_tool_installer = safe_require("mason-tool-installer")
+  M.null_ls = safe_require("null-ls")
+
+  if M.null_ls then
+    M.builtins = M.null_ls.builtins
   end
 
-  local signs = { Error = " ", Warn = "▲", Info = "􀅳", Hint = "⚑" }
-  -- 
-  for type, icon in pairs(signs) do
-    local hl = "DiagnosticSign" .. type
-    vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = hl })
+  return true
+end
+
+-- Check Neovim version compatibility and feature availability
+local function has_feature(feature)
+  if feature == "diagnostic_api" then
+    return vim.fn.has("nvim-0.6") == 1
+  elseif feature == "native_lsp_config" then
+    -- Check for both vim.lsp.enable AND vim.lsp.config
+    return vim.fn.has("nvim-0.11") == 1 and vim.lsp.enable ~= nil
+  elseif feature == "lsp_get_client_by_id" then
+    return vim.fn.has("nvim-0.10") == 1
+  elseif feature == "cmp_nvim_lsp" then
+    return pcall(require, "cmp_nvim_lsp")
+  elseif feature == "virtual_text_disabled_by_default" then
+    return vim.fn.has("nvim-0.11") == 1
+  elseif feature == "deprecated_lsp_handlers" then
+    -- vim.lsp.handlers.hover and signature_help deprecated in 0.12, removed in 0.13
+    return vim.fn.has("nvim-0.12") == 0
+  elseif feature == "new_lsp_config_api" then
+    -- New LSP config API available from 0.12+
+    return vim.fn.has("nvim-0.12") == 1 and vim.lsp.config ~= nil
+  end
+  return false
+end
+
+-- Backwards compatible capabilities setup
+local function setup_capabilities()
+  local capabilities
+
+  if has_feature("cmp_nvim_lsp") then
+    capabilities = require('cmp_nvim_lsp').default_capabilities()
+  elseif vim.lsp.protocol and vim.lsp.protocol.make_client_capabilities then
+    capabilities = vim.lsp.protocol.make_client_capabilities()
+  else
+    capabilities = {}
   end
 
-  -- lsp_lines.setup()
+  -- Add snippet support if available
+  if capabilities.textDocument then
+    capabilities.textDocument.completion = capabilities.textDocument.completion or {}
+    capabilities.textDocument.completion.completionItem =
+      capabilities.textDocument.completion.completionItem or {}
+    capabilities.textDocument.completion.completionItem.snippetSupport = true
+  end
 
-  -- vim.keymap.set("n", "g?", function()
-  --  local lines_enabled = not vim.diagnostic.config().virtual_lines
-  --  vim.diagnostic.config(
-  --    {
-  --      virtual_lines = lines_enabled,
-  --      virtual_text = not lines_enabled
-  --    }
-  --  )
-  -- end, { noremap = true, silent = true })
+  -- Set offset encoding for newer versions (0.11+ supports utf-8 and utf-32)
+  if vim.fn.has("nvim-0.11") == 1 then
+    capabilities.offsetEncoding = { "utf-8", "utf-32", "utf-16" }
+  elseif vim.fn.has("nvim-0.9") == 1 then
+    capabilities.offsetEncoding = { "utf-8", "utf-16" }
+  end
 
-  vim.diagnostic.config({
-    underline = false,
-    signs = true,
-    virtual_text = true, -- virtual_lines = { only_current_line = true },
-    virtual_lines = false,
-    float = {
-      show_header = true,
-      source = "if_many", -- border = 'rounded',
-      border = border,
-      focusable = true,
+  return capabilities
+end
+
+-- Default LSP keymaps (fallback if external not available)
+local function setup_fallback_keymaps(bufnr)
+  -- Only set up minimal fallbacks, prefer external setup
+  local opts = { buffer = bufnr, silent = true, noremap = true }
+  vim.keymap.set('n', 'gd', vim.lsp.buf.definition, opts)
+  vim.keymap.set('n', 'K', vim.lsp.buf.hover, opts)
+  vim.keymap.set('n', '[d', vim.diagnostic.goto_prev, opts)
+  vim.keymap.set('n', ']d', vim.diagnostic.goto_next, opts)
+end
+
+-- Create LSP directory and config files for native LSP
+local function setup_native_lsp_configs()
+  local config_path = vim.fn.stdpath("config")
+  local lsp_dir = config_path .. "/lsp"
+
+  -- Create lsp directory if it doesn't exist
+  vim.fn.mkdir(lsp_dir, "p")
+
+  -- LSP server configurations for native config
+  local server_configs = {
+    lua_ls = {
+      cmd = { "lua-language-server" },
+      filetypes = { "lua" },
+      root_markers = { ".luarc.json", ".luarc.jsonc", ".luacheckrc", ".stylua.toml", "stylua.toml", "selene.toml", "selene.yml" },
+      settings = {
+        Lua = {
+          diagnostics = {
+            globals = { "vim", "use", "_G", "packer_plugins", "P" },
+            disable = {
+              "undefined-global",
+              "lowercase-global",
+              "unused-local",
+              "unused-vararg",
+              "trailing-space"
+            },
+          },
+          workspace = {
+            library = {
+              vim.env.VIMRUNTIME,
+              "${3rd}/luv/library",
+              "${3rd}/busted/library",
+            },
+            checkThirdParty = false,
+          },
+          telemetry = {
+            enable = false,
+          },
+        },
+      },
     },
-    update_in_insert = false, -- default to false
-    severity_sort = true,     -- default to false
-  })
 
-  vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(vim.lsp.diagnostic.on_publish_diagnostics,
-    { underline = false, virtual_text = false, signs = true, update_in_insert = false })
+    pyright = {
+      cmd = { "pyright-langserver", "--stdio" },
+      filetypes = { "python" },
+      root_markers = { "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json" },
+      settings = {
+        python = {
+          formatting = {
+            provider = "none"
+          }
+        }
+      }
+    },
 
-  vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded" })
-  vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(vim.lsp.handlers.signature_help, { border = "rounded" })
+    ts_ls = {
+      cmd = { "typescript-language-server", "--stdio" },
+      filetypes = { "javascript", "javascriptreact", "javascript.jsx", "typescript", "typescriptreact", "typescript.tsx" },
+      root_markers = { "tsconfig.json", "jsconfig.json", "package.json" },
+      init_options = {
+        disableAutomaticTypeAcquisition = true
+      },
+    },
 
-  -- Use an on_attach function to only map the following keys after the language server attaches to the current buffer
-  local on_attach = function(client, bufnr)
-    -- Enable completion triggered by <c-x><c-o>
-    vim.api.nvim_buf_set_option(bufnr, "omnifunc", "v:lua.vim.lsp.omnifunc")
-    local map = function(mode, l, r, opts)
-      opts = opts or {}
-      opts.silent = true
-      opts.noremap = true
-      opts.buffer = bufnr
-      keymap.set(mode, l, r, opts)
+    rust_analyzer = {
+      cmd = { "rust-analyzer" },
+      filetypes = { "rust" },
+      root_markers = { "Cargo.toml", "rust-project.json" },
+    },
+
+    clangd = {
+      cmd = { "clangd", "--background-index", "--clang-tidy", "--header-insertion=iwyu" },
+      filetypes = { "c", "cpp", "objc", "objcpp", "cuda", "proto" },
+      root_markers = { ".clangd", ".clang-tidy", ".clang-format", "compile_commands.json", "compile_flags.txt", "configure.ac" },
+    },
+
+    gopls = {
+      cmd = { "gopls" },
+      filetypes = { "go", "gomod", "gowork", "gotmpl" },
+      root_markers = { "go.work", "go.mod" },
+      settings = {
+        gopls = {
+          gofumpt = true,
+          codelenses = {
+            gc_details = false,
+            generate = true,
+            regenerate_cgo = true,
+            run_govulncheck = true,
+            test = true,
+            tidy = true,
+            upgrade_dependency = true,
+            vendor = true,
+          },
+          hints = {
+            assignVariableTypes = true,
+            compositeLiteralFields = true,
+            compositeLiteralTypes = true,
+            constantValues = true,
+            functionTypeParameters = true,
+            parameterNames = true,
+            rangeVariableTypes = true,
+          },
+          analyses = {
+            fieldalignment = true,
+            nilness = true,
+            unusedparams = true,
+            unusedwrite = true,
+            useany = true,
+          },
+          usePlaceholders = true,
+          completeUnimported = true,
+          staticcheck = true,
+          directoryFilters = { "-.git", "-.vscode", "-.idea", "-.vscode-test", "-node_modules" },
+          semanticTokens = true,
+        },
+      },
+    },
+
+    -- Add more basic configs
+    bashls = {
+      cmd = { "bash-language-server", "start" },
+      filetypes = { "sh", "bash" },
+    },
+
+    --html = {
+    --  cmd = { "vscode-html-language-server", "--stdio" },
+    --  filetypes = { "html" },
+    --},
+
+    --cssls = {
+    --  cmd = { "vscode-css-language-server", "--stdio" },
+    --  filetypes = { "css", "scss", "less" },
+    --},
+
+    --jsonls = {
+    --  cmd = { "vscode-json-language-server", "--stdio" },
+    --  filetypes = { "json", "jsonc" },
+    --},
+
+    yamlls = {
+      cmd = { "yaml-language-server", "--stdio" },
+      filetypes = { "yaml", "yml" },
+    },
+  }
+
+  -- Write config files to lsp directory
+  for server_name, config in pairs(server_configs) do
+    local file_path = lsp_dir .. "/" .. server_name .. ".lua"
+    local file_content = "return " .. vim.inspect(config)
+
+    -- Only write if file doesn't exist to avoid overwriting user customizations
+    if vim.fn.filereadable(file_path) == 0 then
+      local file = io.open(file_path, "w")
+      if file then
+        file:write(file_content)
+        file:close()
+        vim.notify("Created LSP config: " .. file_path, vim.log.levels.DEBUG)
+      end
     end
-    -- Mappings
-    map("n", "K", "<Cmd>lua vim.lsp.buf.hover()<CR>")
-    -- map("n", "gd", "<Cmd>lua vim.lsp.buf.definition()<CR>")
-    map("n", "gd", "<cmd>lua require('goto-preview').goto_preview_definition()<CR>")
-    -- map("n", "gi", "<Cmd>lua vim.lsp.buf.implementation()<CR>")
-    map("n", "gi", "<cmd>lua require('goto-preview').goto_preview_implementation()<CR>")
-    -- map("n", "gr", "<Cmd>lua vim.lsp.buf.references()<CR>")
-    map("n", "gr", "<cmd>lua require('goto-preview').goto_preview_references()<CR>")
-    map("n", "gD", "<Cmd>lua vim.lsp.buf.declaration()<CR>") -- most lsp servers don't implement textDocument/Declaration, so gD is useless for now.
-    map("n", "<leader>k", "<Cmd>lua vim.lsp.buf.signature_help()<CR>")
-    -- map("n", "gt", "<Cmd>lua vim.lsp.buf.type_definition()<CR>")
-    map("n", "gt", "<cmd>lua require('goto-preview').goto_preview_type_definition()<CR>")
-    map("n", "gn", "<Cmd>lua vim.lsp.buf.rename()<CR>")
-    map("n", "ga", "<Cmd>lua vim.lsp.buf.code_action()<CR>")
-    map("n", "gf", "<Cmd>lua vim.lsp.buf.format()<CR>")
-    map("n", "go", "<Cmd>lua vim.diagnostic.open_float()<CR>")
-    map("n", "<leader>go",
-      ":call utils#ToggleDiagnosticsOpenFloat()<CR> | :echom ('Toggle Diagnostics Float open/close...')<CR> | :sl! | echo ('')<CR>")
-    map("n", "gq", "<Cmd>lua vim.diagnostic.setloclist()<CR>")
-    map("n", "[d", "<Cmd>lua vim.diagnostic.goto_prev()<CR>")
-    map("n", "]d", "<Cmd>lua vim.diagnostic.goto_next()<CR>")
-    map("n", "gs", "<Cmd>lua vim.lsp.buf.document_symbol()<CR>")
-    map("n", "gw", "<Cmd>lua vim.lsp.buf.workspace_symbol()<CR>")
-    map("n", "<leader>wa", "<Cmd>lua vim.lsp.buf.add_workspace_folder()<CR>")
-    map("n", "<leader>wr", "<Cmd>lua vim.lsp.buf.remove_workspace_folder()<CR>")
-    map("n", "<leader>wl", function()
-      print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
-    end)
-
-    -- TODO: Use the nicer new API for autocommands
-    cmd("augroup lsp_aucmds")
-    if client.server_capabilities.documentHighlightProvider then
-      cmd("au CursorHold <buffer> lua vim.lsp.buf.document_highlight()")
-      cmd("au CursorMoved <buffer> lua vim.lsp.buf.clear_references()")
-    end
-    cmd("augroup END")
   end
 
-  -- Toggle diagnostics visibility
-  vim.g.diagnostics_visible = true
-  function _G.toggle_diagnostics()
+  return vim.tbl_keys(server_configs)
+end
+
+-- Set up LSP on_attach function
+local function create_on_attach()
+  return function(client, bufnr)
+    -- Your existing keymap setup function from keys.lua
+    if _G.setup_lsp_keymaps then
+      _G.setup_lsp_keymaps(bufnr)
+    else
+      setup_fallback_keymaps(bufnr)
+    end
+
+    -- Disable LSP formatting in favor of null-ls (if null-ls is available)
+    if M.null_ls then
+      client.server_capabilities.documentFormattingProvider = false
+      client.server_capabilities.documentRangeFormattingProvider = false
+    end
+
+    -- Disable specific LSP capabilities to avoid conflicts
+    if client.name == "ruff" then
+      -- Disable ruff hover in favor of Pyright
+      client.server_capabilities.hoverProvider = false
+    elseif client.name == "ts_ls" then
+      -- Disable ts_ls formatting in favor of prettier via null-ls
+      client.server_capabilities.documentFormattingProvider = false
+      client.server_capabilities.documentRangeFormattingProvider = false
+    elseif client.name == "pyright" and M.null_ls then
+      -- Disable pyright formatting in favor of black/isort via null-ls
+      client.server_capabilities.documentFormattingProvider = false
+      client.server_capabilities.documentRangeFormattingProvider = false
+    end
+
+    -- Set log level (backwards compatible)
+    if vim.lsp.set_log_level then
+      vim.lsp.set_log_level("warn")
+    end
+
+    -- Document highlight on cursor hold
+    if client.server_capabilities and client.server_capabilities.documentHighlightProvider then
+      vim.api.nvim_create_autocmd("CursorHold", {
+        group = augroup_highlight,
+        buffer = bufnr,
+        callback = function()
+          if vim.lsp.buf.document_highlight then
+            vim.lsp.buf.document_highlight()
+          end
+        end,
+      })
+      vim.api.nvim_create_autocmd("CursorMoved", {
+        group = augroup_highlight,
+        buffer = bufnr,
+        callback = function()
+          if vim.lsp.buf.clear_references then
+            vim.lsp.buf.clear_references()
+          end
+        end,
+      })
+    end
+  end
+end
+
+-- Set up basic LSP configuration
+function M.setup()
+  -- Initialize all required modules
+  init_modules()
+
+  -- Enable virtual_text diagnostics by default for 0.11+ (since it's disabled by default)
+  if has_feature("virtual_text_disabled_by_default") then
+    vim.diagnostic.config({ virtual_text = true })
+  end
+
+  -- Set up Mason if available (useful for tool management)
+  if M.mason then
+    M.mason.setup({
+      ui = {
+        border = 'rounded',
+        icons = {
+          package_installed = '✓',
+          package_pending = '➜',
+          package_uninstalled = '✗'
+        }
+      }
+    })
+  end
+
+  -- Set up mason-tool-installer if available
+  if M.mason_tool_installer then
+    M.mason_tool_installer.setup({
+      ensure_installed = {
+        -- Language servers
+        "lua-language-server", "pyright", "typescript-language-server", "rust-analyzer",
+        "clangd", "bash-language-server", "yaml-language-server",
+        -- Formatters
+        "stylua", "clang-format", "prettier", "shfmt", "black", "isort", "goimports",
+        "sql-formatter", "shellharden",
+        -- Linters/Diagnostics
+        "eslint_d", "selene", "flake8", "dotenv-linter", "phpcs",
+        -- Utilities
+        "jq"
+      },
+      auto_update = false,
+      run_on_start = true,
+      start_delay = 3000,
+    })
+  end
+
+  -- Set up null-ls if available
+  if M.null_ls and M.builtins then
+    local sources = {
+      M.builtins.diagnostics.selene.with({
+        condition = function(utils)
+          return utils.root_has_file({"selene.toml"})
+        end,
+      }),
+      M.builtins.diagnostics.dotenv_linter,
+      M.builtins.diagnostics.tidy,
+      M.builtins.diagnostics.phpcs.with({
+        condition = function(utils)
+          return utils.root_has_file({"phpcs.xml", "phpcs.xml.dist", ".phpcs.xml", ".phpcs.xml.dist"})
+        end,
+      }),
+
+      -- Formatters (prioritized over LSP formatting)
+      M.builtins.formatting.stylua.with({
+        extra_args = { "--quote-style", "AutoPreferSingle", "--indent-width", "2", "--column-width", "160" },
+        condition = function(utils)
+          return utils.root_has_file({"stylua.toml", ".stylua.toml"})
+        end,
+      }),
+      M.builtins.formatting.prettier.with({
+        extra_args = { "--single-quote", "--tab-width", "4", "--print-width", "100" },
+        filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact", "vue", "css", "scss", "less", "html", "json", "jsonc", "yaml", "markdown", "graphql", "handlebars" },
+        prefer_local = "node_modules/.bin",
+      }),
+      M.builtins.formatting.black.with({
+        extra_args = { "--fast" },
+        prefer_local = ".venv/bin",
+      }),
+      M.builtins.formatting.isort.with({
+        extra_args = { "--profile", "black" },
+        prefer_local = ".venv/bin",
+      }),
+      M.builtins.formatting.goimports,
+      M.builtins.formatting.clang_format.with({
+        extra_args = { "--style", "{BasedOnStyle: Google, IndentWidth: 4}" }
+      }),
+      M.builtins.formatting.shfmt.with({
+        extra_args = { "-i", "2", "-ci" }
+      }),
+      M.builtins.formatting.shellharden,
+      M.builtins.formatting.sql_formatter,
+      M.builtins.formatting.dart_format,
+
+      -- Code actions
+      M.builtins.code_actions.gitsigns,
+      M.builtins.code_actions.gitrebase,
+    }
+
+    M.null_ls.setup({
+      sources = sources,
+      update_in_insert = false,
+      on_attach = function(client, bufnr)
+        -- Disable LSP formatting in favor of null-ls
+        client.server_capabilities.documentFormattingProvider = false
+        client.server_capabilities.documentRangeFormattingProvider = false
+
+        local function lsp_supports_method(client, method)
+          if client.supports_method then
+            return client:supports_method(method)
+          elseif client.server_capabilities then
+            local capability_map = {
+              ["textDocument/formatting"] = "documentFormattingProvider",
+              ["textDocument/rangeFormatting"] = "documentRangeFormattingProvider",
+              ["textDocument/hover"] = "hoverProvider",
+              ["textDocument/signatureHelp"] = "signatureHelpProvider",
+              ["textDocument/documentHighlight"] = "documentHighlightProvider",
+            }
+            local cap = capability_map[method]
+            return cap and client.server_capabilities[cap]
+          end
+          return false
+        end
+
+        if lsp_supports_method(client, "textDocument/formatting") then
+          vim.api.nvim_create_autocmd("BufWritePre", {
+            group = augroup_format,
+            buffer = bufnr,
+            callback = function()
+              if vim.fn.has("nvim-0.8") == 1 then
+                vim.lsp.buf.format({
+                  async = false,
+                  bufnr = bufnr,
+                  filter = function(formatting_client)
+                    return formatting_client.name == "null-ls"
+                  end,
+                })
+              else
+                vim.lsp.buf.formatting_sync()
+              end
+            end,
+          })
+        end
+      end,
+    })
+  end
+
+  -- Set up LSP capabilities
+  local capabilities = setup_capabilities()
+  local on_attach = create_on_attach()
+
+  -- Set up LSP handlers with version compatibility (avoid deprecated APIs)
+  if has_feature("deprecated_lsp_handlers") then
+    -- Use old handler setup for versions before 0.12
+    if vim.lsp.handlers then
+      vim.lsp.handlers['textDocument/hover'] = vim.lsp.with(
+        vim.lsp.handlers.hover, { border = 'rounded' }
+      )
+
+      vim.lsp.handlers['textDocument/signatureHelp'] = vim.lsp.with(
+        vim.lsp.handlers.signature_help, { border = 'rounded' }
+      )
+    end
+  else
+    -- Use new handler setup for 0.12+ (when old handlers are deprecated/removed)
+    if vim.lsp.handlers then
+      vim.lsp.handlers['textDocument/hover'] = vim.lsp.with(
+        vim.lsp.handlers['textDocument/hover'], { border = 'rounded' }
+      )
+
+      vim.lsp.handlers['textDocument/signatureHelp'] = vim.lsp.with(
+        vim.lsp.handlers['textDocument/signatureHelp'], { border = 'rounded' }
+      )
+    end
+  end
+
+  -- Choose configuration method based on Neovim version and available features
+  if has_feature("native_lsp_config") then
+    -- Set up native LSP configuration
+    local servers = setup_native_lsp_configs()
+
+    -- Set default on_attach and capabilities for all LSP servers
+    vim.lsp.config('*', {
+      on_attach = on_attach,
+      capabilities = capabilities,
+    })
+
+    -- Enable the LSP servers
+    vim.lsp.enable(servers)
+
+  elseif M.mason_lspconfig and M.lspconfig then
+    -- Set up mason-lspconfig if available
+    if M.mason_lspconfig then
+      M.mason_lspconfig.setup({
+        ensure_installed = {
+          "lua_ls", "pyright", "ts_ls", "rust_analyzer", "clangd", "gopls",
+          "bashls", "html", "cssls", "jsonls", "yamlls"
+        },
+        automatic_installation = true,
+      })
+    end
+
+    -- Use traditional lspconfig with mason
+    local enabled_servers = {}
+
+    local server_configs = {
+      lua_ls = {
+        settings = {
+          Lua = {
+            diagnostics = {
+              globals = { "vim", "use", "_G", "packer_plugins", "P" },
+            },
+            workspace = {
+              library = {
+                vim.env.VIMRUNTIME,
+                "${3rd}/luv/library",
+                "${3rd}/busted/library",
+              },
+              checkThirdParty = false,
+            },
+            telemetry = { enable = false },
+          },
+        },
+      },
+      pyright = {
+        settings = {
+          python = {
+            formatting = { provider = "none" }
+          }
+        }
+      },
+      ts_ls = {
+        init_options = {
+          disableAutomaticTypeAcquisition = true
+        },
+      },
+      clangd = {
+        cmd = { "clangd", "--background-index", "--clang-tidy", "--header-insertion=iwyu" },
+      },
+      gopls = {
+        settings = {
+          gopls = {
+            gofumpt = true,
+            usePlaceholders = true,
+            completeUnimported = true,
+            staticcheck = true,
+          },
+        },
+      },
+    }
+
+    M.mason_lspconfig.setup_handlers({
+      function(server_name)
+        if not enabled_servers[server_name] then
+          local config = server_configs[server_name] or {}
+          config.on_attach = on_attach
+          config.capabilities = capabilities
+          M.lspconfig[server_name].setup(config)
+          enabled_servers[server_name] = true
+        end
+      end,
+    })
+
+  elseif M.lspconfig then
+    -- Fallback: Set up servers manually if mason-lspconfig is not available
+    local servers = { 'lua_ls', 'pyright', 'ts_ls', 'rust_analyzer', 'clangd', 'gopls', 'bashls', 'html', 'cssls', 'jsonls', 'yamlls' }
+    local enabled_servers = {}
+
+    for _, server in ipairs(servers) do
+      if not enabled_servers[server] and M.lspconfig[server] then
+        local config = {
+          on_attach = on_attach,
+          capabilities = capabilities,
+        }
+        M.lspconfig[server].setup(config)
+        enabled_servers[server] = true
+      end
+    end
+  end
+
+  return true
+end
+
+-- Global toggle for diagnostics (backwards compatible)
+vim.g.diagnostics_visible = true
+function _G.toggle_diagnostics()
+  if has_feature("diagnostic_api") then
     if vim.g.diagnostics_visible then
       vim.g.diagnostics_visible = false
       vim.diagnostic.disable()
@@ -122,327 +612,63 @@ if not vim.g.lsp_setup_done then
       vim.g.diagnostics_visible = true
       vim.diagnostic.enable()
     end
+  else
+    -- Fallback for older versions
+    if vim.g.diagnostics_visible then
+      vim.g.diagnostics_visible = false
+      vim.lsp.handlers["textDocument/publishDiagnostics"] = function() end
+    else
+      vim.g.diagnostics_visible = true
+      vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
+        vim.lsp.diagnostic.on_publish_diagnostics, {}
+      )
+    end
   end
+end
 
-  -- Open float for diagnostics automatically
-  vim.cmd([[
-  augroup OpenFloat
-        " autocmd CursorHold,CursorHoldI * lua vim.diagnostic.open_float(nil, {focusable = false,})
-        autocmd CursorHold * lua vim.diagnostic.open_float(nil, {focusable = false,})
+-- Create Mason command if Mason is available
+if M.mason then
+  vim.api.nvim_create_user_command("Mason", function()
+    require("mason.ui").open()
+  end, {})
+end
 
-  augroup END
-  ]])
-
-  -- Suppress error messages from lang servers
-  vim.lsp.set_log_level("debug")
-  local capabilities = vim.lsp.protocol.make_client_capabilities()
-  capabilities = require("cmp_nvim_lsp").default_capabilities()
-  capabilities.textDocument.completion.completionItem.snippetSupport = true
-  capabilities.offsetEncoding = { "utf-8", "utf-16" }
-
-  local function prefer_null_ls_fmt(client)
-    client.server_capabilities.documentHighlightProvider = true
-    client.server_capabilities.documentFormattingProvider = true
-    on_attach(client)
-  end
-
-  --local cmp_nvim_lsp = require('cmp_nvim_lsp')
-  local servers = {
-    asm_lsp = {},
-    bashls = {},
-    clangd = {
-      on_attach = on_attach,
-      capabilites = capabilities,
-      cmd = { "clangd", "--offset-encoding=utf-16", "--cross-file-rename", "--header-insertion=never",
-        "--suggest-missing-includes" },
-      init_options = {
-        clangdFileStatus = true,
-      },
-      root_files = {
-        ".clangd",
-        ".clang-tidy",
-        ".clang-format",
-        "compile_commands.json",
-        "compile_flags.txt",
-        "configure.ac", -- AutoTools
-      },
-    },
-    cssls = { filetypes = { "css", "scss", "less", "sass" },
-      root_dir = lspconfig.util.root_pattern("package.json", ".git") },                                                        -- ghcide = {},
-    html = {},
-    jsonls = { prefer_null_ls = true, cmd = { "--stdio" } },
-    intelephense = {},
-    julials = {
-      on_new_config = function(new_config, _)
-        local julia = vim.fn.expand("~/.julia/environments/nvim-lspconfig/bin/julia")
-        if lspconfig.util.path.is_file(julia) then
-          new_config.cmd[1] = julia
-        end
-      end,
-      settings = { julia = { format = { indent = 2 } } },
-    },
-    pyright = { settings = { python = { formatting = { provider = "yapf" }, linting = { pytypeEnabled = true } } } },
-    rust_analyzer = {
-      settings = {
-        ["rust-analyzer"] = { cargo = { allFeatures = true }, checkOnSave = { command = "clippy",
-          extraArgs = { "--no-deps" } } },
-      },
-    },
-    dartls = {
-      cmd = { "dart", "language-server", "--protocol=lsp" },
-      filetypes = { "dart" },
-      init_options = {
-        closingLabels = true,
-        flutterOutline = true,
-        onlyAnalyzeProjectsWithOpenFiles = true,
-        outline = true,
-        suggestFromUnimportedLibraries = true,
-      }, -- root_dir = root_pattern("pubspec.yaml"),
-      settings = { dart = { completeFunctionCalls = true, showTodos = true } },
-      on_attach = function(client, bufnr) end,
-    },
-    lua_ls = {
-      on_attach = on_attach,
-      capabilities = capabilities,
-      debounce_text_changes = 500,
-      settings = {
-        Lua = {
-          runtime = { version = "LuaJIT", path = vim.split(package.path, ";") },
-          diagnostics = { enable = true, globals = { "vim" } },
-          workspace = { maxPreload = 2000, preloadFileSize = 50000, checkThirdParty = false },
-        },
-      },
-    },
-    sqlls = {},
-    tsserver = {
-      capabilities = require("cmp_nvim_lsp").default_capabilities(vim.lsp.protocol.make_client_capabilities()),
-      on_attach = function(client)
-        client.server_capabilities.document_formatting = false
-        client.server_capabilities.document_range_formatting = false
-      end,
-      filetypes = { "javascript", "javascriptreact", "javascript.jsx", "typescript", "typescriptreact", "typescript.tsx" },
-    },
-    vimls = {},
-    yamlls = {},
-  }
-
-  mason_lspconfig.setup({
-    ensure_installed = servers, -- will be installed by mason
-    automatic_installation = true,
+-- Automatically show diagnostics in a float window for the current line
+if has_feature("diagnostic_api") then
+  vim.api.nvim_create_autocmd("CursorHold", {
+    group = augroup_diag_float,
+    pattern = "*",
+    callback = function()
+      local opts = {
+        focusable = false,
+        close_events = { "BufLeave", "CursorMoved", "InsertEnter", "FocusLost" },
+        border = border,
+        source = "always",
+        prefix = " ",
+        scope = "cursor",
+      }
+      vim.diagnostic.open_float(nil, opts)
+    end,
   })
 
-  -- Your other configurations ...
-  -- require("lspconfig").dartls.setup({ capabilities = capabilities })
-  -- local installed_lsp = mason_lspconfig.ensure_installed
-  -- local mason_lspconfig = require("mason-lspconfig").ensure_installed
-
-  -- require("lspconfig").setup({
-  --  function()
-  --    for _, lsp in ipairs(installed_lsp) do
-  --      if
-  --        lsp ~= "sqls"
-  --        --and lsp ~= "sumneko_lua"
-  --        --and lsp ~= "stylelint_lsp"
-  --        --and lsp ~= "rust_analyzer"
-  --        --and lsp ~= "sourcekit"
-  --        and lsp ~= "dartls"
-  --      then
-  --        lspconfig[lsp].setup({
-  --          on_attach = on_attach,
-  --          capabilities = capabilities,
-  --        })
-  --      end
-  --    end
-  --  end,
-  -- })
-
-  for server, config in pairs(servers) do
-    if config.prefer_null_ls then
-      if config.on_attach then
-        local old_on_attach = config.on_attach
-        config.on_attach = function(client, bufnr)
-          old_on_attach(client, bufnr)
-          prefer_null_ls_fmt(client)
-        end
-      else
-        config.on_attach = prefer_null_ls_fmt
-      end
-    elseif not config.on_attach then
-      config.on_attach = on_attach
-    end
-
-    lspconfig[server].setup(config)
-  end
-
-  -- null_ls setup
-  local builtins = null_ls.builtins
-  local augroup = vim.api.nvim_create_augroup("LspFormatting", {})
-
-  -- local eslint_opts = {
-  --  -- condition = function(utils)
-  --  --   return utils.root_has_file ".eslintrc.js" or utils.root_has_file ".eslintrc" or utils.root_has_file ".eslintrc.json"
-  --  -- end,
-  --  -- diagnostics_format = "#{m} [#{c}]",
-  --  prefer_local = true,
-  -- }
-
-  -- null_ls.setup({
-  local sources = {
-    -- Diagnostics
-    builtins.diagnostics.chktex,
-    -- null_ls.builtins.code_actions.eslint_d,
-    -- null_ls.builtins.diagnostics.eslint_d,
-    -- null_ls.builtins.formatting.eslint_d,
-    -- null_ls.builtins.diagnostics.cppcheck,
-    -- null_ls.builtins.diagnostics.proselint,
-    -- null_ls.builtins.diagnostics.pylint,
-    -- builtins.diagnostics.selene,
-    builtins.diagnostics.dotenv_linter,
-    builtins.diagnostics.shellcheck.with({ -- shell script diagnostics
-      diagnostic_config = {                -- see :help vim.diagnostic.config()
-        underline = true,
-        virtual_text = false,
-        signs = true,
-        update_in_insert = false,
-        severity_sort = true,
-      },
-      diagnostics_format = "[#{c}] #{m} (#{s})", -- this will run every time the source runs,
-      -- so you should prefer caching results if possible
-    }),
-    builtins.diagnostics.zsh.with({ filetypes = "zsh", "sh" }),
-    builtins.diagnostics.todo_comments,
-    builtins.diagnostics.teal,
-    -- null_ls.builtins.diagnostics.vale,
-    builtins.diagnostics.vint,
-    builtins.diagnostics.tidy,
-    builtins.diagnostics.php,
-    builtins.diagnostics.phpcs,
-    builtins.diagnostics.flake8,
-    builtins.diagnostics.eslint_d.with({
-      condition = function(utils)
-        return utils.root_has_file(".eslintrc.json")
-      end,
-    }),
-    builtins.formatting.eslint_d,
-    -- null_ls.builtins.diagnostics.write_good.with { filetypes = { 'markdown', 'tex' } },
-
-    -- Formatting
-    builtins.formatting.shfmt.with({ filetypes = { "bash", "zsh", "sh" }, extra_args = { "-i", "2", "-ci" } }),
-    builtins.formatting.shellharden,
-    builtins.formatting.trim_whitespace.with({ filetypes = { "tmux", "teal", "zsh" } }), -- builtins.formatting.beautysh,
-    builtins.formatting.beautysh.with({ filetypes = "zsh" }),
-    builtins.formatting.clang_format.with({
-      filetypes = { "c", "cpp", "cs", "java", "cuda", "proto" },
-      extra_args = {
-        "--style",
-        "{BasedOnStyle: Google, IndentWidth: 4, BreakBeforeBinaryOperators: NonAssignment, AllowShortFunctionsOnASingleLine: None}",
-      },
-    }),
-    --builtins.formatting.rustfmt,
-    builtins.formatting.sql_formatter,
-    -- null_ls.builtins.formatting.cmake_format,
-    builtins.formatting.isort,
-    builtins.formatting.htmlbeautifier, -- null_ls.builtins.formatting.prettier,
-    builtins.formatting.prettierd,
-    builtins.formatting.prettier.with({
-      filetypes = { "javascript", "javascriptreact", "typescript", "typescriptreact", "json", "yaml", "markdown", "html",
-        "css", "scss", "less", "graphql", "vue", "svelte" },
-      extra_args = { "--single-quote", "--tab-width 4", "--print-width 200" },
-    }),
-    -- builtins.formatting.stylua,
-    -- builtins.formatting.lua_format,
-    builtins.formatting.stylua.with({
-      filetypes = { "lua" },
-      command = "stylua",
-      args = { "--quote_style", "AutoPreferSingle", "--indent-width", "2", "--column-width", "160", "--indent-type",
-        "Spaces", "-" },
-    }),
-    -- builtins.formatting.dart_format,
-    builtins.formatting.dart_format.with({ filetypes = { "dart" } }),
-    builtins.formatting.trim_whitespace,
-    builtins.formatting.yapf,
-    -- null_ls.builtins.formatting.black
-
-    -- Code Actions
-    builtins.code_actions.shellcheck, -- shell script code actions
-    -- builtins.code_actions.eslint_d.with(eslint_opts),
-    -- null_ls.builtins.code_actions.refactoring.with { filetypes = { 'javascript', 'typescript', 'lua', 'python', 'c', 'cpp' } },
-    builtins.code_actions.gitsigns,
-    builtins.code_actions.gitrebase, -- Hover
-    builtins.hover.dictionary,
-    builtins.hover.printenv,
-  }
-  -- })
-  -- Linters/Formatters ensure installed
-  -- for _, pkg_name in ipairs({
-  --  "dart-debug-Adaptor",
-  --  "stylua",
-  --  "prettier",
-  --  "prettierd",
-  -- }) do
-
-  -- Import the builtins table from the null-ls module and store it in the null_ls_sources variable
-  null_ls.setup({
-    sources = sources,
-    update_in_insert = true,
-    on_attach = function(client, bufnr)
-      if client.supports_method("textDocument/formatting") then
-        vim.api.nvim_clear_autocmds({ group = augroup, buffer = bufnr })
-        vim.api.nvim_create_autocmd("BufWritePre", {
-          group = augroup,
-          buffer = bufnr,
-          callback = function()
-            vim.lsp.buf.format()
-          end,
+  -- Autocmd to open the diagnostic window when a file with errors is opened
+  vim.api.nvim_create_autocmd({ "LspAttach", "BufReadPost" }, {
+    group = augroup_diag_load,
+    callback = function()
+      local has_errors = #vim.diagnostic.get(0, { severity = vim.diagnostic.severity.ERROR }) > 0
+      if has_errors then
+        vim.diagnostic.setqflist({
+          open = true,
+          title = "Diagnostics",
         })
       end
     end,
   })
-
-  -- Install all the null-ls sources using Mason
-  local registry = require("mason-registry")
-  for _, source_name in ipairs(sources) do
-    local ok, pkg = pcall(registry.get_package, source_name)
-    if ok then
-      if not pkg:is_installed() then
-        pkg:install()
-      end
-    end
-  end
-  -- Loop through the null_ls_sources table and install the packages
-  -- Install all sources for null-ls
-  -- local null_ls_sources = require("null-ls").builtins
-
-  -- for _, source_name in ipairs(null_ls_sources) do
-  --  local ok, pkg = pcall(mason.get_package, source_name)
-  --  if ok then
-  --    if not pkg:is_installed() then
-  --      pkg:install()
-  --    end
-  --  end
-  -- end
-  vim.api.nvim_create_user_command("NullLsToggle", function()
-    -- you can also create commands to disable or enable sources
-    require("null-ls").toggle({})
-  end, {})
-
-  local null_ls_stop = function()
-    local null_ls_client
-    local clients = require("user.mods").get_lsp_clients(bufnr)
-
-    for _, client in ipairs(clients) do
-      if client.name == "null-ls" then
-        null_ls_client = client
-      end
-    end
-    if not null_ls_client then
-      return
-    end
-
-    null_ls_client.stop()
-  end
-
-  vim.api.nvim_create_user_command("NullLsStop", null_ls_stop, {})
-
-  vim.g.lsp_setup_done = true
 end
+
+-- Create Toggle Diagnostic command
+vim.api.nvim_create_user_command("ToggleDiagnostics", _G.toggle_diagnostics, {
+  desc = "Toggle global diagnostics visibility"
+})
+
+return M
