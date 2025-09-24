@@ -1,4 +1,12 @@
-require("harpoon").setup({
+local M = {}
+
+function M.setup()
+  local ok, harpoon = pcall(require, "harpoon")
+  if not ok or not harpoon then
+    return false
+  end
+
+  harpoon.setup({
   menu = {
     width = vim.api.nvim_win_get_width(0) - 4,
   },
@@ -12,18 +20,26 @@ require("harpoon").setup({
   --  --{ "<leader>4", function() require("harpoon.term").gotoTerminal(2) end, desc = "Terminal 2" },
   --  --{ "<leader>5", function() require("harpoon.term").sendCommand(1,1) end, desc = "Command 1" },
   --  --{ "<leader>6", function() require("harpoon.term").sendCommand(1,2) end, desc = "Command 2" },
-  --},
-})
-vim.api.nvim_set_keymap("n", "<leader>ma", ":lua require('harpoon.mark').add_file()<CR>", {})
-vim.api.nvim_set_keymap("n", "<leader>mt", ":lua require('harpoon.mark').toggle_file()<CR>", {})
-vim.api.nvim_set_keymap("n", "<leader>mq", ":lua require('harpoon.ui').toggle_quick_menu()<CR>", {})
-vim.api.nvim_set_keymap("n", "<leader>mh", ":lua require('harpoon.ui').nav_file(1)<CR>", {})
-vim.api.nvim_set_keymap("n", "<leader>mj", ":lua require('harpoon.ui').nav_file(2)<CR>", {})
-vim.api.nvim_set_keymap("n", "<leader>mk", ":lua require('harpoon.ui').nav_file(3)<CR>", {})
-vim.api.nvim_set_keymap("n", "<leader>ml", ":lua require('harpoon.ui').nav_file(4)<CR>", {})
+  })
 
---local mark = require("harpoon.mark")
---local ui = require("harpoon.ui")
+  -- Set up keymaps safely
+  local function safe_keymap(mode, lhs, rhs, opts)
+    local opts_with_noremap = vim.tbl_extend('force', {noremap = true, silent = true}, opts or {})
+    vim.keymap.set(mode, lhs, rhs, opts_with_noremap)
+  end
+
+  safe_keymap("n", "<leader>ma", function() require('harpoon.mark').add_file() end, { desc = "Harpoon: Add file" })
+  safe_keymap("n", "<leader>mt", function() require('harpoon.mark').toggle_file() end, { desc = "Harpoon: Toggle file" })
+  safe_keymap("n", "<leader>mq", function() require('harpoon.ui').toggle_quick_menu() end, { desc = "Harpoon: Toggle quick menu" })
+  safe_keymap("n", "<leader>mh", function() require('harpoon.ui').nav_file(1) end, { desc = "Harpoon: Navigate to file 1" })
+  safe_keymap("n", "<leader>mj", function() require('harpoon.ui').nav_file(2) end, { desc = "Harpoon: Navigate to file 2" })
+  safe_keymap("n", "<leader>mk", function() require('harpoon.ui').nav_file(3) end, { desc = "Harpoon: Navigate to file 3" })
+  safe_keymap("n", "<leader>ml", function() require('harpoon.ui').nav_file(4) end, { desc = "Harpoon: Navigate to file 4" })
+
+  return true
+end
+
+return M
 --
 --vim.keymap.set("n", "<leader>a", mark.add_file)
 --vim.keymap.set("n", "<C-e>", ui.toggle_quick_menu)

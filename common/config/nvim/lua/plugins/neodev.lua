@@ -1,4 +1,15 @@
-require("neodev").setup({
+local M = {}
+
+--- Setup and configure neodev
+-- This function initializes neodev with configurations for better Lua development experience
+-- @return boolean True if setup was successful, false otherwise
+function M.setup()
+  local ok, neodev = pcall(require, 'neodev')
+  if not ok then
+    return false
+  end
+
+  neodev.setup({
   --library = { plugins = { "nvim-dap-ui" }, types = true },
   --library = { plugins = { "neotest" }, types = true },
   library = {
@@ -23,7 +34,12 @@ require("neodev").setup({
   -- If you disable this, then you have to set {before_init=require("neodev.lsp").before_init}
   -- in your lsp start options
   lspconfig = true,
-  -- much faster, but needs a recent built of lua-language-server
-  -- needs lua-language-server >= 3.6.0
-  pathStrict = true,
-})
+    -- much faster, but needs a recent built of lua-language-server
+    -- needs lua-language-server >= 3.6.0
+    pathStrict = true,
+  })
+  
+  return true
+end
+
+return M

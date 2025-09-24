@@ -1,13 +1,17 @@
-local status, statuscol = pcall(require, "statuscol")
+local M = {}
 
-if not status then
-    vim.notify("statuscol not found")
-    return
-end
+function M.setup()
+  local ok, statuscol = pcall(require, "statuscol")
+  if not ok or not statuscol then
+    return false
+  end
 
-local builtin = require("statuscol.builtin")
+  local builtin_ok, builtin = pcall(require, "statuscol.builtin")
+  if not builtin_ok or not builtin then
+    return false
+  end
 
-statuscol.setup({
+  statuscol.setup({
     segments = {
         { text = { builtin.lnumfunc }, click = "v:lua.ScLa" },
         { text = { "%s" }, click = "v:lua.ScSa" },
@@ -25,4 +29,9 @@ statuscol.setup({
         "dapui_console",
         "dapui_repl",
     },
-})
+  })
+  
+  return true
+end
+
+return M

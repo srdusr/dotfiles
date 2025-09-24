@@ -1,14 +1,83 @@
+-- ============================================================================
+-- Modules/Utility functions
+-- ============================================================================
+
 local M = {}
 
---- Shorten Function Names
+-- Shorten Function Names
 local fn = vim.fn
-function M.executable(name)
-  if fn.executable(name) > 0 then
-    return true
-  end
+local api = vim.api
 
-  return false
+--- Check if an executable exists
+---@param name string The name of the executable to check
+---@return boolean
+function M.executable(name)
+  return fn.executable(name) > 0
 end
+
+--- Check if a feature is available in Neovim
+---@param feat string The feature to check (e.g., 'nvim-0.7')
+---@return boolean
+function M.has(feat)
+  return fn.has(feat) == 1
+end
+
+--- Setup command aliases
+---@param from string The alias
+---@param to string The command to alias to
+function M.setup_command_alias(from, to)
+  local cmd = string.format('cnoreabbrev <expr> %s (getcmdtype() == ":" && getcmdline() == "%s") ? "%s" : "%s"',
+    from, from, to, from)
+  api.nvim_command(cmd)
+end
+
+--- Preserve cursor position while formatting
+---@param cmd string The command to run
+function M.preserve_cursor(cmd)
+  local cursor = api.nvim_win_get_cursor(0)
+  vim.cmd(cmd)
+  api.nvim_win_set_cursor(0, cursor)
+end
+
+--- Toggle quickfix window
+function M.toggle_quickfix()
+  local qf_exists = false
+  for _, win in pairs(fn.getwininfo()) do
+    if win.quickfix == 1 then
+      qf_exists = true
+      break
+    end
+  end
+  if qf_exists then
+    vim.cmd('cclose')
+  else
+    vim.cmd('copen')
+  end
+end
+
+--- Toggle location list
+function M.toggle_location()
+  local loc_exists = false
+  for _, win in pairs(fn.getwininfo()) do
+    if win.loclist == 1 then
+      loc_exists = true
+      break
+    end
+  end
+  if loc_exists then
+    vim.cmd('lclose')
+  else
+    vim.cmd('lopen')
+  end
+end
+
+-- Setup command aliases
+M.setup_command_alias('W', 'w')
+M.setup_command_alias('Wq', 'wq')
+M.setup_command_alias('WQ', 'wq')
+M.setup_command_alias('Q', 'q')
+M.setup_command_alias('Qa', 'qa')
+M.setup_command_alias('QA', 'qa')
 
 --------------------------------------------------
 
@@ -28,48 +97,75 @@ end
 
 -- Format on save
 local format_augroup = vim.api.nvim_create_augroup("LspFormatting", {})
-require("null-ls").setup({
-  -- you can reuse a shared lspconfig on_attach callback here
-  on_attach = function(client, bufnr)
-    if client.supports_method("textDocument/formatting") then
-      vim.api.nvim_clear_autocmds({ group = format_augroup, buffer = bufnr })
-      vim.api.nvim_create_autocmd("BufWritePre", {
-        group = format_augroup,
-        buffer = bufnr,
-        callback = function()
-          -- on 0.8, you should use vim.lsp.buf.format({ bufnr = bufnr }) instead
-          --vim.lsp.buf.formatting_seq_sync()
-          vim.lsp.buf.format({ bufnr = bufnr })
-        end,
-      })
-    end
-  end,
-})
+
+local ok, null_ls = pcall(require, "null-ls")
+if ok then
+  null_ls.setup({
+    on_attach = function(client, bufnr)
+      if client.supports_method("textDocument/formatting") then
+        vim.api.nvim_clear_autocmds({ group = format_augroup, buffer = bufnr })
+        vim.api.nvim_create_autocmd("BufWritePre", {
+          group = format_augroup,
+          buffer = bufnr,
+          callback = function()
+            if vim.lsp.buf.format then
+              vim.lsp.buf.format({ bufnr = bufnr })
+            else
+              vim.lsp.buf.formatting_seq_sync()
+            end
+          end,
+        })
+      end
+    end,
+  })
+end
 
 vim.cmd([[autocmd BufWritePre <buffer> lua vim.lsp.buf.format()]])
---vim.cmd [[autocmd BufWritePre * lua vim.lsp.buf.format()]]
+
 
 --------------------------------------------------
 
 ---Determine if a value of any type is empty
 ---@param item any
 ---@return boolean?
+
+--- Checks if an item is considered "empty".
+--
+-- An item is considered empty if:
+-- - It is nil.
+-- - It is an empty string.
+-- - It is an empty table.
+-- - It is a number equal to 0 (you might want to adjust this based on your definition of "empty" for numbers).
+--
+-- @param item any The item to check.
+-- @return boolean True if the item is empty, false otherwise.
 function M.empty(item)
-  if not item then
+  -- Case 1: item is nil
+  if item == nil then
     return true
   end
+
   local item_type = type(item)
+
+  -- Case 2: empty string
   if item_type == "string" then
     return item == ""
   end
-  if item_type == "number" then
-    return item <= 0
-  end
+
   if item_type == "table" then
     return vim.tbl_isempty(item)
   end
-  return item ~= nil
+  if item_type == "number" then
+    return item == 0 -- Changed from item <= 0 for a stricter "empty" definition for numbers
+  end
+
+  if item_type == "boolean" then
+    return not item -- Returns true if item is false, false if item is true
+  end
+
+  return false
 end
+
 
 --------------------------------------------------
 
@@ -533,22 +629,34 @@ function M.DeleteCurrentBuffer()
   -- Delay before closing the nvim-tree window
 end
 
-vim.cmd([[autocmd FileType NvimTree lua require("user.mods").DeleteCurrentBuffer()]])
 
 -- On :bd nvim-tree should behave as if it wasn't opened
+-- Only run DeleteCurrentBuffer if NvimTree is loaded
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "NvimTree",
+  callback = function()
+    local ok, mods = pcall(require, "user.mods")
+    if ok and type(mods.DeleteCurrentBuffer) == "function" then
+      mods.DeleteCurrentBuffer()
+    end
+  end,
+})
+
+-- Handle NvimTree window closure safely
 vim.api.nvim_create_autocmd("BufEnter", {
   nested = true,
   callback = function()
-    -- Only 1 window with nvim-tree left: we probably closed a file buffer
-    if #vim.api.nvim_list_wins() == 1 and require("nvim-tree.utils").is_nvim_tree_buf() then
-      local api = require("nvim-tree.api")
-      -- Required to let the close event complete. An error is thrown without this.
+    local ok_utils, utils = pcall(require, "nvim-tree.utils")
+    if not ok_utils then return end
+
+    if #vim.api.nvim_list_wins() == 1 and utils.is_nvim_tree_buf() then
+      local ok_api, api = pcall(require, "nvim-tree.api")
+      if not ok_api then return end
+
       vim.defer_fn(function()
-        -- close nvim-tree: will go to the last buffer used before closing
-        api.tree.toggle({ find_file = true, focus = true })
-        -- re-open nivm-tree
-        api.tree.toggle({ find_file = true, focus = true })
-        -- nvim-tree is still the active window. Go to the previous window.
+        -- Safely toggle tree off and on
+        pcall(api.tree.toggle, { find_file = true, focus = true })
+        pcall(api.tree.toggle, { find_file = true, focus = true })
         vim.cmd("wincmd p")
       end, 0)
     end
@@ -741,105 +849,105 @@ end
 
 --------------------------------------------------
 
--- Intercept file open
-local augroup = vim.api.nvim_create_augroup("user-autocmds", { clear = true })
-local intercept_file_open = true
-vim.api.nvim_create_user_command("InterceptToggle", function()
-  intercept_file_open = not intercept_file_open
-  local intercept_state = "`Enabled`"
-  if not intercept_file_open then
-    intercept_state = "`Disabled`"
-  end
-  vim.notify("Intercept file open set to " .. intercept_state, vim.log.levels.INFO, {
-    title = "Intercept File Open",
-    ---@param win integer The window handle
-    on_open = function(win)
-      vim.api.nvim_buf_set_option(vim.api.nvim_win_get_buf(win), "filetype", "markdown")
-    end,
-  })
-end, { desc = "Toggles intercepting BufNew to open files in custom programs" })
+---- Intercept file open
+--local augroup = vim.api.nvim_create_augroup("user-autocmds", { clear = true })
+--local intercept_file_open = true
+--vim.api.nvim_create_user_command("InterceptToggle", function()
+--  intercept_file_open = not intercept_file_open
+--  local intercept_state = "`Enabled`"
+--  if not intercept_file_open then
+--    intercept_state = "`Disabled`"
+--  end
+--  vim.notify("Intercept file open set to " .. intercept_state, vim.log.levels.INFO, {
+--    title = "Intercept File Open",
+--    ---@param win integer The window handle
+--    on_open = function(win)
+--      vim.api.nvim_buf_set_option(vim.api.nvim_win_get_buf(win), "filetype", "markdown")
+--    end,
+--  })
+--end, { desc = "Toggles intercepting BufNew to open files in custom programs" })
 
--- NOTE: Add "BufReadPre" to the autocmd events to also intercept files given on the command line, e.g.
--- `nvim myfile.txt`
-vim.api.nvim_create_autocmd({ "BufNew" }, {
-  group = augroup,
-  callback = function(args)
-    ---@type string
-    local path = args.match
-    ---@type integer
-    local bufnr = args.buf
-
-    ---@type string? The file extension if detected
-    local extension = vim.fn.fnamemodify(path, ":e")
-    ---@type string? The filename if detected
-    local filename = vim.fn.fnamemodify(path, ":t")
-
-    ---Open a given file path in a given program and remove the buffer for the file.
-    ---@param buf integer The buffer handle for the opening buffer
-    ---@param fpath string The file path given to the program
-    ---@param fname string The file name used in notifications
-    ---@param prog string The program to execute against the file path
-    local function open_in_prog(buf, fpath, fname, prog)
-      vim.notify(string.format("Opening `%s` in `%s`", fname, prog), vim.log.levels.INFO, {
-        title = "Open File in External Program",
-        ---@param win integer The window handle
-        on_open = function(win)
-          vim.api.nvim_buf_set_option(vim.api.nvim_win_get_buf(win), "filetype", "markdown")
-        end,
-      })
-      local mods = require("user.mods")
-      local nvim_ver = mods.get_nvim_version()
-
-      local version_major, version_minor = string.match(nvim_ver, "(%d+)%.(%d+)")
-      version_major = tonumber(version_major)
-      version_minor = tonumber(version_minor)
-
-      if version_major > 0 or (version_major == 0 and version_minor >= 10) then
-        vim.system({ prog, fpath }, { detach = true })
-      else
-        vim.fn.jobstart({ prog, fpath }, { detach = true })
-      end
-      vim.api.nvim_buf_delete(buf, { force = true })
-    end
-
-    local extension_callbacks = {
-      ["pdf"] = function(buf, fpath, fname)
-        open_in_prog(buf, fpath, fname, "zathura")
-      end,
-      ["epub"] = function(buf, fpath, fname)
-        open_in_prog(buf, fpath, fname, "zathura")
-      end,
-      ["mobi"] = "pdf",
-      ["png"] = function(buf, fpath, fname)
-        open_in_prog(buf, fpath, fname, "vimiv")
-      end,
-      ["jpg"] = "png",
-      ["mp4"] = function(buf, fpath, fname)
-        open_in_prog(buf, fpath, fname, "vlc")
-      end,
-      ["gif"] = "mp4",
-    }
-
-    ---Get the extension callback for a given extension. Will do a recursive lookup if an extension callback is actually
-    ---of type string to get the correct extension
-    ---@param ext string A file extension. Example: `png`.
-    ---@return fun(bufnr: integer, path: string, filename: string?) extension_callback The extension callback to invoke, expects a buffer handle, file path, and filename.
-    local function extension_lookup(ext)
-      local callback = extension_callbacks[ext]
-      if type(callback) == "string" then
-        callback = extension_lookup(callback)
-      end
-      return callback
-    end
-
-    if extension ~= nil and not extension:match("^%s*$") and intercept_file_open then
-      local callback = extension_lookup(extension)
-      if type(callback) == "function" then
-        callback(bufnr, path, filename)
-      end
-    end
-  end,
-})
+---- NOTE: Add "BufReadPre" to the autocmd events to also intercept files given on the command line, e.g.
+---- `nvim myfile.txt`
+--vim.api.nvim_create_autocmd({ "BufNew" }, {
+--  group = augroup,
+--  callback = function(args)
+--    ---@type string
+--    local path = args.match
+--    ---@type integer
+--    local bufnr = args.buf
+--
+--    ---@type string? The file extension if detected
+--    local extension = vim.fn.fnamemodify(path, ":e")
+--    ---@type string? The filename if detected
+--    local filename = vim.fn.fnamemodify(path, ":t")
+--
+--    ---Open a given file path in a given program and remove the buffer for the file.
+--    ---@param buf integer The buffer handle for the opening buffer
+--    ---@param fpath string The file path given to the program
+--    ---@param fname string The file name used in notifications
+--    ---@param prog string The program to execute against the file path
+--    local function open_in_prog(buf, fpath, fname, prog)
+--      vim.notify(string.format("Opening `%s` in `%s`", fname, prog), vim.log.levels.INFO, {
+--        title = "Open File in External Program",
+--        ---@param win integer The window handle
+--        on_open = function(win)
+--          vim.api.nvim_buf_set_option(vim.api.nvim_win_get_buf(win), "filetype", "markdown")
+--        end,
+--      })
+--      local mods = require("user.mods")
+--      local nvim_ver = mods.get_nvim_version()
+--
+--      local version_major, version_minor = string.match(nvim_ver, "(%d+)%.(%d+)")
+--      version_major = tonumber(version_major)
+--      version_minor = tonumber(version_minor)
+--
+--      if version_major > 0 or (version_major == 0 and version_minor >= 10) then
+--        vim.system({ prog, fpath }, { detach = true })
+--      else
+--        vim.fn.jobstart({ prog, fpath }, { detach = true })
+--      end
+--      vim.api.nvim_buf_delete(buf, { force = true })
+--    end
+--
+--    local extension_callbacks = {
+--      ["pdf"] = function(buf, fpath, fname)
+--        open_in_prog(buf, fpath, fname, "zathura")
+--      end,
+--      ["epub"] = function(buf, fpath, fname)
+--        open_in_prog(buf, fpath, fname, "zathura")
+--      end,
+--      ["mobi"] = "pdf",
+--      ["png"] = function(buf, fpath, fname)
+--        open_in_prog(buf, fpath, fname, "vimiv")
+--      end,
+--      ["jpg"] = "png",
+--      ["mp4"] = function(buf, fpath, fname)
+--        open_in_prog(buf, fpath, fname, "vlc")
+--      end,
+--      ["gif"] = "mp4",
+--    }
+--
+--    ---Get the extension callback for a given extension. Will do a recursive lookup if an extension callback is actually
+--    ---of type string to get the correct extension
+--    ---@param ext string A file extension. Example: `png`.
+--    ---@return fun(bufnr: integer, path: string, filename: string?) extension_callback The extension callback to invoke, expects a buffer handle, file path, and filename.
+--    local function extension_lookup(ext)
+--      local callback = extension_callbacks[ext]
+--      if type(callback) == "string" then
+--        callback = extension_lookup(callback)
+--      end
+--      return callback
+--    end
+--
+--    if extension ~= nil and not extension:match("^%s*$") and intercept_file_open then
+--      local callback = extension_lookup(extension)
+--      if type(callback) == "function" then
+--        callback(bufnr, path, filename)
+--      end
+--    end
+--  end,
+--})
 
 --------------------------------------------------
 
@@ -1060,6 +1168,260 @@ vim.api.nvim_create_user_command("CloseFloatingWindows", function(opts)
 end, { bang = true, nargs = 0 })
 
 --------------------------------------------------
+
+
+-- Platform detection
+local uname = vim.loop.os_uname().sysname
+local has = vim.fn.has
+
+local is_mac = has("mac") == 1
+local is_linux = uname == "Linux"
+local is_windows = has("win32") == 1 or uname:find("Windows")
+local is_wsl = has("wsl") == 1 or (uname:find("Linux") and (os.getenv("WSL_DISTRO_NAME") ~= nil))
+local is_termux = has("termux") == 1 or (os.getenv("PREFIX") and os.getenv("PREFIX"):find("com.termux"))
+local os_name = (is_mac and "mac") or (is_linux and "linux") or (is_windows and "windows") or (is_wsl and "wsl") or (is_termux and "termux") or uname:lower()
+
+-- Check if a command exists
+local function command_exists(cmd)
+  local handle = io.popen(cmd .. " --version 2>/dev/null")
+  if handle then
+    local result = handle:read("*a")
+    handle:close()
+    return result ~= ""
+  end
+  return false
+end
+
+-- Detect clipboard tool on Linux
+local function detect_clipboard_tool()
+  if command_exists("xclip") then return "xclip" end
+  if command_exists("xsel") then return "xsel" end
+  if command_exists("wl-copy") and command_exists("wl-paste") then return "wl-clipboard" end
+  return nil
+end
+
+-- OSC52 clipboard copy fallback
+local function osc52_copy(text)
+  local encoded = vim.fn.system("base64 | tr -d '\n'", text)
+  io.write(string.format("\027]52;c;%s\007", encoded))
+end
+
+---- Set clipboard
+--function set_clipboard(text)
+--  if not text or text == "" then return end
+--
+--  if is_mac then
+--    local handle = io.popen("pbcopy", "w")
+--    if handle then
+--      handle:write(text)
+--      handle:close()
+--    end
+--  elseif is_linux then
+--    local tool = detect_clipboard_tool()
+--    if tool == "xclip" then
+--      local handle = io.popen("xclip -selection clipboard", "w")
+--      if handle then handle:write(text) handle:close() end
+--    elseif tool == "xsel" then
+--      local handle = io.popen("xsel --clipboard --input", "w")
+--      if handle then handle:write(text) handle:close() end
+--    elseif tool == "wl-clipboard" then
+--      local handle = io.popen("wl-copy", "w")
+--      if handle then handle:write(text) handle:close() end
+--    else
+--      osc52_copy(text)
+--      vim.notify("Using OSC52 for clipboard (install xclip, xsel, or wl-clipboard for better support)", vim.log.levels.INFO)
+--    end
+--  elseif is_wsl or is_windows then
+--    local handle = io.popen("clip", "w")
+--    if handle then handle:write(text) handle:close() end
+--  elseif is_termux then
+--    local handle = io.popen("termux-clipboard-set", "w")
+--    if handle then handle:write(text) handle:close() end
+--  else
+--    vim.notify("No clipboard support for OS: " .. os_name, vim.log.levels.WARN)
+--  end
+--end
+--
+---- Clipboard sync autocmd setup
+--local function setup_clipboard_sync()
+--  local ok, Job = pcall(require, "plenary.job")
+--  if not ok then
+--    -- plenary not available, skip
+--    return
+--  end
+--
+--  vim.api.nvim_create_augroup("clipboard_sync", { clear = true })
+--  vim.api.nvim_create_autocmd("TextYankPost", {
+--    group = "clipboard_sync",
+--    desc = "Sync yanked text to system clipboard",
+--    pattern = "*",
+--    callback = function()
+--      local text = vim.fn.getreg("\"")
+--      if text ~= nil and text ~= "" then
+--        set_clipboard(text)
+--      end
+--    end,
+--  })
+--end
+--setup_clipboard_sync()
+--
+---- Terminal clear function (optional)
+--function clear_terminal()
+--  vim.opt.scrollback = 1
+--  vim.api.nvim_feedkeys("i", "n", false)
+--  vim.api.nvim_feedkeys("clear\r", "n", false)
+--  vim.api.nvim_feedkeys("\x1b", "n", false)
+--  vim.api.nvim_feedkeys("i", "n", false)
+--  vim.defer_fn(function()
+--    vim.opt.scrollback = 10000
+--  end, 100)
+--end
+--
+---- Get clipboard content (optional)
+--function GetClipboard()
+--  local handle
+--
+--  if is_mac then
+--    handle = io.popen("pbpaste", "r")
+--  elseif is_linux then
+--    local tool = detect_clipboard_tool()
+--    if tool == "xclip" then
+--      handle = io.popen("xclip -selection clipboard -o", "r")
+--    elseif tool == "xsel" then
+--      handle = io.popen("xsel --clipboard --output", "r")
+--    elseif tool == "wl-clipboard" then
+--      handle = io.popen("wl-paste", "r")
+--    end
+--  elseif is_wsl or is_windows then
+--    handle = io.popen("powershell.exe Get-Clipboard", "r")
+--  elseif is_termux then
+--    handle = io.popen("termux-clipboard-get", "r")
+--  end
+--
+--  if handle then
+--    local result = handle:read("*a")
+--    handle:close()
+--    return result or ""
+--  end
+--
+--  return ""
+--end
+
+--------------------------------------------------
+
+-- Cross-platform file/URL opener
+function M.open_file_or_url(path)
+  local commands = {
+    mac     = string.format('open "%s"', path),
+    linux   = string.format('xdg-open "%s" &', path),
+    wsl     = string.format('wslview "%s" &', path),
+    windows = string.format('start "" "%s"', path),
+    termux  = string.format('am start -a android.intent.action.VIEW -d "%s"', path),
+  }
+
+  local cmd = commands[M.os_name]
+  if cmd then
+    os.execute(cmd)
+  else
+    vim.notify("No supported file opener for this OS: " .. tostring(M.os_name), vim.log.levels.WARN)
+  end
+end
+
+--------------------------------------------------
+
+-- Automcmd to close netrw buffer when file is opened
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "netrw",
+  callback = function()
+    vim.api.nvim_create_autocmd("BufEnter", {
+      once = true,
+      callback = function()
+        if vim.bo.filetype ~= "netrw" then
+          for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.bo[buf].filetype == "netrw" then
+              vim.api.nvim_buf_delete(buf, { force = true })
+            end
+          end
+        end
+      end,
+    })
+  end,
+})
+
+--------------------------------------------------
+
+-- Autocomplete
+vim.api.nvim_create_autocmd("InsertCharPre", {
+    callback = function()
+        -- Exit the autocmd if nvim-cmp is present
+        local cmp_is_present, _ = pcall(require, "cmp")
+        if cmp_is_present then
+            return
+        end
+
+        -- Skip unwanted buffer types (Telescope, NvimTree, etc.)
+        local ft = vim.bo.filetype
+        local bt = vim.bo.buftype
+        local ignore_ft = {
+            "TelescopePrompt",
+            "prompt",
+            "nofile",
+            "terminal",
+            "help",
+            "quickfix",
+            "lazy",
+            "neo-tree",
+            "NvimTree",
+            "starter",
+            "packer",
+        }
+
+        if bt ~= "" or vim.tbl_contains(ignore_ft, ft) then
+            return
+        end
+
+        local col = vim.fn.col(".")
+        local line = vim.fn.getline(".")
+        local function safe_sub(i)
+            return line:sub(i, i)
+        end
+
+        local prev3 = safe_sub(col - 3)
+        local prev2 = safe_sub(col - 2)
+        local prev1 = safe_sub(col - 1)
+        local curr = vim.v.char
+
+        if curr:match("%w") and prev3:match("%W") and prev2:match("%w") and prev1:match("%w") then
+            vim.api.nvim_feedkeys(
+                vim.api.nvim_replace_termcodes("<C-n>", true, true, true),
+                "n",
+                true
+            )
+        end
+    end,
+})
+--------------------------------------------------
+
+M.has_treesitter = function ( bufnr )
+    if not bufnr then
+        bufnr = vim.api.nvim_get_current_buf()
+    end
+
+    local highlighter = require( "vim.treesitter.highlighter" )
+
+    if highlighter.active[ bufnr ] then
+        return true
+    else
+        return false
+    end
+end
+
+M.parse_treesitter = function ( bufnr, range )
+    local parser = vim.treesitter.get_parser( bufnr )
+
+    -- XXX https://neovim.io/doc/user/treesitter.html#LanguageTree%3Aparse()
+    parser:parse( range )
+end
 
 -- ...
 return M
