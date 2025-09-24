@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#~/.profile
+
 # ======================================
 # Basic environment setup
 # ======================================
@@ -58,7 +60,8 @@ start_session() {
             exec startx /usr/bin/bspwm
             ;;
         Hyprland|sway)
-            exec dbus-launch --sh-syntax --exit-with-session "$s"
+            #exec dbus-launch --sh-syntax --exit-with-session "$s"
+            exec dbus-launch --sh-syntax --exit-with-session "$s" >/dev/null 2>&1
             ;;
         gnome-session|startplasma-x11|startxfce4|openbox|i3)
             exec "$s"
