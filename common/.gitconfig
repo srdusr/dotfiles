@@ -1,6 +1,6 @@
 [user]
-	name = 
-	email = 
+	name =
+	email =
 
 [init]
 	defaultBranch = main
@@ -30,3 +30,5 @@
 [credential "https://gist.github.com"]
 	helper =
 	helper = !sh -c 'command -v gh >/dev/null 2>&1 && exec gh auth git-credential || exit 0'
+[credential]
+	helper = cache

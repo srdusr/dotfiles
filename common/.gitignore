@@ -4,9 +4,6 @@
 # Ignore git config
 .gitconfig
 
-# Ignore dotfiles dir
-.cfg
-
 # Ignore Packer's compiled files
 packer_compiled.lua
 
@@ -25,32 +22,23 @@ zcompdump
 # Ignore node_modules directory
 node_modules/
 
-## Ignore .png files
-#*.png
-
 # Ignore .zip files
 *.zip
 
 # Ignore .pxd files
 *.pxd
 
-# Ignore .local directory
-#^.local/
-
 # Ignore .cache directory
 ^.cache/
 
-# Ignore downloads directory
+# Ignore normal directories
 ^downloads/
-
-# Ignore music directory
 ^music/
-
-# Ignore pictures/images directory
 ^images/
 ^pictures/
-
-# Ignore virtual machine directory
+^videos/
 ^virt/
 
+# Ignore dotfiles dir
+~/.cfg
 .cfg

@@ -1,8 +1,0 @@
-[subtree ".config/nvim"]
-	path = .config/nvim
-	url = git@github.com:srdusr/nvim.git
-
-[subtree ".scripts"]
-	path = .scripts
-	url = git@github.com:srdusr/scripts.git
-

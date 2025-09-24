@@ -1,0 +1,7 @@
+[subtree "common/config/nvim"]
+    path = common/config/nvim
+    url = git@github.com:srdusr/nvim.git
+
+[subtree "common/scripts"]
+    path = common/scripts
+    url = git@github.com:srdusr/scripts.git
