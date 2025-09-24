@@ -18,13 +18,13 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     _repo_path() {
         local f="$1"
 
-        # If it's an absolute path that's not in HOME, handle it specially
+        # Absolute paths outside HOME
         if [[ "$f" == /* && "$f" != "$HOME/"* ]]; then
             echo "$CFG_OS/${f#/}"
             return
         fi
 
-        # Check for paths that should go to the repository root
+        # Files already in repo structure
         case "$f" in
             common/*|linux/*|macos/*|windows/*|profile/*|README.md)
                 echo "$f"
@@ -35,22 +35,17 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 ;;
         esac
 
-        # Default: put under OS-specific home
+        # Default: OS-specific home
         echo "$CFG_OS/home/$f"
     }
 
     _sys_path() {
         local repo_path="$1"
-        local os_path_pattern="$CFG_OS/"
-
-        # Handle OS-specific files that are not in the home subdirectory
-        if [[ "$repo_path" == "$os_path_pattern"* && "$repo_path" != */home/* ]]; then
-            echo "/${repo_path#$os_path_pattern}"
-            return
-        fi
 
         case "$repo_path" in
-            # Common configs → OS-specific config dirs
+            common/scripts/*)
+                echo "$HOME/.scripts/${repo_path#common/scripts/}"
+                ;;
             common/config/*)
                 case "$CFG_OS" in
                     linux)
@@ -61,6 +56,7 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                         echo "$HOME/Library/Application Support/${repo_path#common/config/}"
                         ;;
                     windows)
+                        # Windows Bash (Git Bash, MSYS, WSL) respects LOCALAPPDATA
                         echo "$LOCALAPPDATA\\${repo_path#common/config/}"
                         ;;
                     *)
@@ -68,36 +64,18 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                         ;;
                 esac
                 ;;
-
-            # Common scripts → ~/.scripts
-            common/scripts/*)
-                echo "$HOME/.scripts/${repo_path#common/scripts/}"
-                ;;
-            # Common assets → stay in repo
-            common/assets/*)
+            common/assets/*|profile/*|README.md)
                 echo "$HOME/.cfg/$repo_path"
                 ;;
-
-            # Other common files (dotfiles like .bashrc, .gitconfig, etc.) → $HOME
             common/*)
-                echo "$HOME/${repo_path#common/}"
+                echo "$HOME/.cfg/$repo_path"
                 ;;
-
-            # OS-specific home
             */home/*)
                 echo "$HOME/${repo_path#*/home/}"
                 ;;
-
-            # Profile configs and README → stay in repo
-            profile/*|README.md)
+            *)
                 echo "$HOME/.cfg/$repo_path"
                 ;;
-
-            # Default fallback
-            *)
-              echo "$HOME/.cfg/$repo_path"
-              ;;
-
         esac
     }
 
