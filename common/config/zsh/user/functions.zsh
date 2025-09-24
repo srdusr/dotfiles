@@ -1,6 +1,5 @@
 # Dotfiles Management System
 if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
-
     # Core git wrapper - .cfg is bare repo, work-tree points to .cfg itself
     _config() {
         git --git-dir="$HOME/.cfg" --work-tree="$HOME/.cfg" "$@"
@@ -18,13 +17,13 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     _repo_path() {
         local f="$1"
 
-        # Absolute paths outside HOME
+        # If it's an absolute path that's not in HOME, handle it specially
         if [[ "$f" == /* && "$f" != "$HOME/"* ]]; then
             echo "$CFG_OS/${f#/}"
             return
         fi
 
-        # Files already in repo structure
+        # Check for paths that should go to the repository root
         case "$f" in
             common/*|linux/*|macos/*|windows/*|profile/*|README.md)
                 echo "$f"
@@ -35,12 +34,19 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 ;;
         esac
 
-        # Default: OS-specific home
+        # Default: put under OS-specific home
         echo "$CFG_OS/home/$f"
     }
 
     _sys_path() {
         local repo_path="$1"
+        local os_path_pattern="$CFG_OS/"
+
+        # Handle OS-specific files that are not in the home subdirectory
+        if [[ "$repo_path" == "$os_path_pattern"* && "$repo_path" != */home/* ]]; then
+            echo "/${repo_path#$os_path_pattern}"
+            return
+        fi
 
         case "$repo_path" in
             common/scripts/*)
@@ -259,70 +265,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 fi
 
                 _config status
-                ;;
-
-            clean-missing)
-                echo "Removing missing files from git index..."
-                local removed_count=0
-                while read -r repo_file; do
-                    local full_repo_path="$HOME/.cfg/$repo_file"
-                    if [[ ! -e "$full_repo_path" ]]; then
-                        _config rm --cached "$repo_file"
-                        echo "Removed from git: $repo_file"
-                        ((removed_count++))
-                    fi
-                done < <(_config ls-files)
-                echo "Removed $removed_count missing files from git index."
-                ;;
-
-            move-files)
-                # Move files from one path pattern to another in the repository
-                local from_pattern="$1"
-                local to_pattern="$2"
-
-                if [[ -z "$from_pattern" || -z "$to_pattern" ]]; then
-                    echo "Usage: config move-files <from_pattern> <to_pattern>"
-                    echo "Example: config move-files 'common/nvim' 'common/config/nvim'"
-                    return 1
-                fi
-
-                echo "Moving files from $from_pattern to $to_pattern..."
-                local moved_count=0
-
-                # Find all files matching the from_pattern
-                _config ls-files | grep "^$from_pattern/" | while read -r repo_file; do
-                    local new_repo_file="${repo_file/$from_pattern/$to_pattern}"
-                    local old_full_path="$HOME/.cfg/$repo_file"
-                    local new_full_path="$HOME/.cfg/$new_repo_file"
-
-                    # Create destination directory
-                    mkdir -p "$(dirname "$new_full_path")"
-
-                    # Move the file in the filesystem if it exists
-                    if [[ -e "$old_full_path" ]]; then
-                        mv "$old_full_path" "$new_full_path"
-                        echo "Moved: $repo_file -> $new_repo_file"
-                    else
-                        # File doesn't exist, but we still need to update git index
-                        # Try to get it from the system location first
-                        local sys_file="$(_sys_path "$repo_file")"
-                        if [[ -e "$sys_file" ]]; then
-                            cp -a "$sys_file" "$new_full_path"
-                            echo "Copied from system: $sys_file -> $new_repo_file"
-                        else
-                            echo "Warning: Neither repo nor system file exists for $repo_file"
-                            continue
-                        fi
-                    fi
-
-                    # Update git index
-                    _config rm --cached "$repo_file" 2>/dev/null || true
-                    _config add "$new_repo_file"
-
-                    ((moved_count++))
-                done
-
-                echo "Moved $moved_count files from $from_pattern to $to_pattern"
                 ;;
 
             deploy|checkout)
