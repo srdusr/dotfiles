@@ -3717,7 +3717,7 @@ trap cleanup_on_exit EXIT
 trap handle_interrupt INT
 
 # Execute main if script is run directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ "${BASH_SOURCE[0]-}" == "$0" ]]; then
     # Check basic requirements
     for req in git curl; do
         if ! command_exists "$req"; then
