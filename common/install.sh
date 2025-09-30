@@ -4,9 +4,17 @@
 # Created On: Tue 06 Sep 2025 16:20:52 PM CAT
 # Project: Dotfiles installation script
 
-# TODO: allow optional change user/password, also optional change root password, first check if they are the same (auto)
-
 # Dependencies: git, curl
+
+# POSIX-compatible shim: if not running under bash (e.g., invoked via `sh -c "$(curl ...)"`),
+# re-exec the remainder of this script with bash.
+if [ -z "${BASH_VERSION:-}" ]; then
+  tmp="$(mktemp)" || exit 1
+  # Read the rest of the script into a temp file, then exec bash on it
+  cat > "$tmp"
+  exec bash "$tmp" "$@"
+  exit 1
+fi
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
@@ -140,6 +148,7 @@ declare -A INSTALLATION_STEPS=(
     ["install_dependencies"]="Install dependencies"
     ["install_dotfiles"]="Install dotfiles repository"
     ["setup_user_dirs"]="Setup user directories"
+    ["setup_passwords"]="Setup user and root passwords (optional)"
     ["install_essentials"]="Install essential tools"
     ["install_packages"]="Install system packages"
     ["setup_shell"]="Setup shell environment"
@@ -159,6 +168,7 @@ STEP_ORDER=(
     "install_dotfiles"
     "deploy_config"
     "setup_user_dirs"
+    "setup_passwords"
     "install_essentials"
     "install_packages"
     "setup_shell"
@@ -525,7 +535,18 @@ detect_package_manager() {
         # Find packages.yml in standard locations
         local original_dir="$PWD"
         cd "$HOME" 2>/dev/null || true
-        local packages_files=("$PACKAGES_FILE" "common/$PACKAGES_FILE" ".cfg/common/$PACKAGES_FILE")
+        # Search common locations for packages.yml, including repo-local and script directory
+        local __script_dir
+        __script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+        local packages_files=(
+            "$PACKAGES_FILE" \
+            "common/$PACKAGES_FILE" \
+            ".cfg/common/$PACKAGES_FILE" \
+            "$__script_dir/../packages.yml" \
+            "$__script_dir/packages.yml" \
+            "$DOTFILES_DIR/common/$PACKAGES_FILE" \
+            "$DOTFILES_DIR/packages.yml"
+        )
         local found_packages_file=""
         for pf in "${packages_files[@]}"; do
             if [[ -f "$pf" ]]; then
@@ -535,17 +556,54 @@ detect_package_manager() {
         done
         cd "$original_dir" 2>/dev/null || true
 
+        # Optionally merge a profile overlay packages.yml over the base file
+        local merged_packages_file=""
         if command_exists yq && [[ -n "$found_packages_file" ]]; then
+            local overlay_candidates=(
+                "$HOME/.cfg/profile/$INSTALL_MODE/packages.yml"
+                "$HOME/profile/$INSTALL_MODE/packages.yml"
+                "$__script_dir/../profile/$INSTALL_MODE/packages.yml"
+                "$__script_dir/profile/$INSTALL_MODE/packages.yml"
+                "$DOTFILES_DIR/profile/$INSTALL_MODE/packages.yml"
+            )
+            local overlay_file=""
+            for opf in "${overlay_candidates[@]}"; do
+                [[ -f "$opf" ]] && { overlay_file="$opf"; break; }
+            done
+            if [[ -n "$overlay_file" ]]; then
+                merged_packages_file="$(mktemp)"
+                if yq eval-all 'select(fileIndex==0) * select(fileIndex==1)' "$found_packages_file" "$overlay_file" >"$merged_packages_file" 2>/dev/null; then
+                    print_info "Using merged packages.yml (base + profile overlay: $INSTALL_MODE)"
+                else
+                    print_warning "Failed to merge profile packages overlay; using base packages.yml"
+                    rm -f "$merged_packages_file" 2>/dev/null || true
+                    merged_packages_file=""
+                fi
+            fi
+        fi
+
+        # If we have a resolved file, set PACKAGES_FILE to its absolute path for downstream steps
+        if [[ -n "$found_packages_file" ]]; then
+            if [[ -n "$merged_packages_file" ]]; then
+                PACKAGES_FILE="$merged_packages_file"
+            else
+                # Canonical absolute path
+                PACKAGES_FILE="$(cd "$(dirname "$found_packages_file")" && pwd -P)/$(basename "$found_packages_file")"
+            fi
+            export PACKAGES_FILE
+        fi
+
+        if command_exists yq && [[ -n "${merged_packages_file:-$found_packages_file}" ]]; then
             # Prefer distro block, fallback to manager block
             # Initialize to avoid set -u (nounset) issues before assignment
             local pm_update="" pm_install=""
             if [[ -n "$DISTRO" ]]; then
-                pm_update=$(yq eval ".package_managers.${DISTRO}.update" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
-                pm_install=$(yq eval ".package_managers.${DISTRO}.install" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                pm_update=$(yq eval ".package_managers.${DISTRO}.update" "${merged_packages_file:-$found_packages_file}" 2>/dev/null | grep -v "^null$" || echo "")
+                pm_install=$(yq eval ".package_managers.${DISTRO}.install" "${merged_packages_file:-$found_packages_file}" 2>/dev/null | grep -v "^null$" || echo "")
             fi
             if [[ -z "$pm_update" || -z "$pm_install" ]]; then
-                pm_update=$(yq eval ".package_managers.${PACKAGE_MANAGER}.update" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
-                pm_install=$(yq eval ".package_managers.${PACKAGE_MANAGER}.install" "$found_packages_file" 2>/dev/null | grep -v "^null$" || echo "")
+                pm_update=$(yq eval ".package_managers.${PACKAGE_MANAGER}.update" "${merged_packages_file:-$found_packages_file}" 2>/dev/null | grep -v "^null$" || echo "")
+                pm_install=$(yq eval ".package_managers.${PACKAGE_MANAGER}.install" "${merged_packages_file:-$found_packages_file}" 2>/dev/null | grep -v "^null$" || echo "")
             fi
             if [[ -n "$pm_update" && -n "$pm_install" ]]; then
                 PACKAGE_UPDATE_CMD="$pm_update"
@@ -2110,6 +2168,119 @@ setup_user_dirs() {
     mark_step_completed "setup_user_dirs"
 }
 
+setup_passwords() {
+    print_section "Setting Up Passwords (Optional)"
+    save_state "setup_passwords" "started"
+
+    if [[ "$ASK_MODE" != true && "$FORCE_MODE" != true ]]; then
+        print_info "Skipping password setup (non-interactive). Use --ask to be prompted."
+        mark_step_completed "setup_passwords"
+        return 0
+    fi
+
+    # Change current user password
+    if prompt_user "Change password for user '$USER'?" "N"; then
+        print_color "$YELLOW" "Enter new password for $USER: "
+        read -rs __pw_user; echo
+        print_color "$YELLOW" "Confirm new password for $USER: "
+        read -rs __pw_user2; echo
+        if [[ "$__pw_user" == "$__pw_user2" && -n "$__pw_user" ]]; then
+            if execute_with_privilege "bash -lc 'echo \"$USER:$__pw_user\" | chpasswd'"; then
+                print_success "Password updated for $USER"
+            else
+                print_error "Failed to update password for $USER"
+            fi
+        else
+            print_warning "Passwords did not match; skipping $USER"
+        fi
+        unset __pw_user __pw_user2
+    else
+        print_skip "User password change (skipped)"
+    fi
+
+    # Change root password
+    if prompt_user "Change password for 'root'?" "N"; then
+        print_color "$YELLOW" "Enter new password for root: "
+        read -rs __pw_root; echo
+        print_color "$YELLOW" "Confirm new password for root: "
+        read -rs __pw_root2; echo
+        if [[ "$__pw_root" == "$__pw_root2" && -n "$__pw_root" ]]; then
+            if execute_with_privilege "bash -lc 'echo \"root:$__pw_root\" | chpasswd'"; then
+                print_success "Password updated for root"
+            else
+                print_error "Failed to update password for root"
+            fi
+        else
+            print_warning "Passwords did not match; skipping root"
+        fi
+        unset __pw_root __pw_root2
+    else
+        print_skip "Root password change (skipped)"
+    fi
+
+    mark_step_completed "setup_passwords"
+}
+
+# Safely sync a system file with backup. Usage: sync_system_file_with_backup /etc/target /path/to/source
+sync_system_file_with_backup() {
+    local target="$1" src="$2"
+    if [[ -z "$target" || -z "$src" ]]; then
+        print_error "sync_system_file_with_backup: missing arguments"
+        return 1
+    fi
+    if [[ ! -f "$src" ]]; then
+        print_error "Source file not found: $src"
+        return 1
+    fi
+    local backup="${target}.bak.$(date +%Y%m%d-%H%M%S)"
+    run_privileged "mkdir -p '$(dirname "$target")'" || return 1
+    if run_privileged "test -f '$target'"; then
+        run_privileged "cp -a '$target' '$backup'" || return 1
+        print_info "Backed up $target to $backup"
+    fi
+    run_privileged "install -m 644 '$src' '$target'" && print_success "Updated $target"
+}
+
+# Pre-install essentials (git, curl) early if missing
+preinstall_essentials() {
+    local need_any=false
+    command_exists git || need_any=true
+    command_exists curl || need_any=true
+    if [[ "$need_any" != true ]]; then
+        return 0
+    fi
+    detect_os
+    detect_package_manager || return 1
+    update_package_database || true
+    local ok=true
+    command_exists git  || install_single_package git dependency || ok=false
+    command_exists curl || install_single_package curl dependency || ok=false
+    [[ "$ok" == true ]]
+}
+
+## Privileged file helpers (Utility)
+# Ensure a line exists in a file (exact match). Creates file and parent dir if needed. Uses privilege.
+ensure_line_in_file_privileged() {
+    local file="$1"
+    local line="$2"
+
+    # Create parent dir if needed
+    local dir
+    dir="$(dirname "$file")"
+    run_privileged "mkdir -p '$dir'" || return 1
+
+    # Create file if missing
+    run_privileged "touch '$file'" || return 1
+
+    # Check exact line presence
+    if run_privileged "grep -Fqx -- '$(printf %s "$line" | sed "s/'/'\\''/g")' '$file'"; then
+        return 0
+    fi
+
+    # Append safely
+    run_privileged "printf '%s\n' '$(printf %s "$line" | sed "s/'/'\\''/g")' >> '$file'"
+}
+
 install_essentials() {
     print_section "Installing Essential Tools"
     save_state "install_essentials" "started"
@@ -2350,8 +2521,6 @@ setup_shell() {
 
     mark_step_completed "setup_shell"
 }
-
-## install_zsh_plugins deprecated; handled via packages.yml
 
 setup_ssh() {
     print_section "Setting Up SSH"
@@ -3718,13 +3887,14 @@ trap handle_interrupt INT
 
 # Execute main if script is run directly
 if [[ "${BASH_SOURCE[0]-}" == "$0" ]]; then
-    # Check basic requirements
-    for req in git curl; do
-        if ! command_exists "$req"; then
-            print_error "$req is required but not installed"
+    # Ensure basic requirements (attempt auto-install if possible)
+    if ! command_exists git || ! command_exists curl; then
+        print_warning "git/curl missing; attempting to install prerequisites"
+        preinstall_essentials || {
+            print_error "Required tools git/curl are not installed and could not be auto-installed"
             exit 1
-        fi
-    done
+        }
+    fi
 
     main "$@"
 fi

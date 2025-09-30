@@ -1,6 +1,10 @@
 # Dotfiles Installation Packages Configuration
 # This file defines packages to install based on installation profiles and distribution-specific mappings
 
+# TODO:
+# tree-sitter-cli
+# make sure rust is installed, go pipx virtualenvwrapper
+
 #======================================
 # Installation Profiles
 #======================================
@@ -214,7 +218,6 @@ fedora:
   hdparm: hdparm
   acpi: acpi
   parted: parted
-  cups: cups
   sysstat: sysstat
   hwinfo: hwinfo
 
@@ -254,7 +257,6 @@ rhel:
   hdparm: hdparm
   acpi: acpi
   parted: parted
-  cups: cups
   sysstat: sysstat
 
 opensuse:
@@ -319,7 +321,6 @@ gentoo:
   hdparm: sys-apps/hdparm
   acpi: sys-power/acpi
   parted: sys-block/parted
-  cups: net-print/cups
   sysstat: app-admin/sysstat
   hwinfo: sys-apps/hwinfo
   hack-font: media-fonts/hack
@@ -553,11 +554,11 @@ gentoo_use_flags:
   openssh: "ssl kerberos ldap pam"
   firefox: "dbus gtk3 pulseaudio startup-notification wifi"
   mpv: "alsa pulseaudio lua drm wayland X"
-  gtk: "wayland X cups introspection"
+  gtk: "wayland X introspection"
   pipewire: "alsa bluetooth jack pulseaudio sound-server"
   ffmpeg: "alsa encode mp3 opus pulseaudio theora vorbis webp x264 x265"
   networkmanager: "bluetooth dhclient introspection wifi"
-  bluez: "alsa cups obex readline"
+  bluez: "alsa obex readline"
   qemu: "aio alsa bluetooth curl gtk jpeg ncurses opengl png pulseaudio sdl spice ssh usb vnc"
   libvirt: "firewalld libssh nfs numa parted qemu sasl udev"
 
@@ -814,7 +815,6 @@ services:
       - chronyd
     desktop:
       - bluetooth
-      - cups
   disable:
     server:
       - bluetooth
@@ -845,9 +845,11 @@ development:
       - typescript
       - eslint
       - prettier
+      - tree-sitter-cli
 
   python:
     global_packages:
+      - pipx
       - black
       - flake8
       - mypy
