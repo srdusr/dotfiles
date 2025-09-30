@@ -11,6 +11,10 @@
 # If not running interactively, and not being sourced, don’t do anything
 [[ $- != *i* ]] && [[ "${BASH_SOURCE[0]:-${(%):-%N}}" == "$0" ]] && return
 
+if [ -n "$ZSH_VERSION" ] && [ -f "$HOME/.config/zsh/.zshenv" ]; then
+    . "$HOME/.config/zsh/.zshenv"
+fi
+
 # Terminal key bindings
 #stty intr '^q' # Free Ctrl+C for copy use Ctrl+Q instead for Interrupt
 stty lnext '^-' # Free Ctrl+V for paste use Ctrl+- instead for Literal next
@@ -33,11 +37,6 @@ for zsh_source in "$HOME"/.config/zsh/user/*.zsh; do
     ZSH_SOURCES+=("$zsh_source")
 done
 
-# Source ZSH files
-for zsh_source in "${ZSH_SOURCES[@]}"; do
-    source "$zsh_source"
-done
-
 # Faster SSH
 if [[ -n "$SSH_CLIENT" ]]; then
     export KEYTIMEOUT=10
@@ -50,7 +49,13 @@ if [[ "${TERM_PROGRAM:-}" == "vscode" ]]; then
   unset ARGV0
 fi
 
+# Source ZSH files
+for zsh_source in "${ZSH_SOURCES[@]}"; do
+    source "$zsh_source"
+done
+
 ##########    Source Plugins, should be last    ##########
+#source /usr/share/nvm/init-nvm.sh
 
 # Load fzf keybindings and completion if fzf is installed
 if command -v fzf >/dev/null 2>&1; then
