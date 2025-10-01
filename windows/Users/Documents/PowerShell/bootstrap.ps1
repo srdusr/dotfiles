@@ -219,52 +219,21 @@ function Install-Packages {
             return
         }
         
-        # Get packages for current profile and OS
-        $profilePackages = @()
+        # Install profile-specific Windows packages (profiles.<profile>.windows)
         if ($packages.profiles.$Profile.windows) {
-            $profilePackages += $packages.profiles.$Profile.windows
-        }
-        if ($packages.profiles.$Profile.common) {
-            $profilePackages += $packages.profiles.$Profile.common
-        }
-        
-        foreach ($package in $profilePackages) {
-            $packageName = if ($packages.packages.$package.windows) {
-                $packages.packages.$package.windows
-            } else {
-                $package
-            }
-
-            if (Test-PackageInstalled -Manager $packageManager -Name $packageName) {
-                Write-Info "Already installed: $packageName"
-                continue
-            }
-
-            Write-Info "Installing package: $packageName"
-
-            switch ($packageManager) {
-                "chocolatey" {
-                    if (-not (choco list --local-only | Select-String -Pattern "^$packageName\s")) {
-                        choco install $packageName -y
-                        if ($LASTEXITCODE -eq 0) {
-                            Write-Success "Installed: $packageName"
-                        } else {
-                            Write-Error "Failed to install: $packageName"
-                        }
-                    } else {
-                        Write-Info "Already installed: $packageName"
-                    }
-                }
-                "winget" {
-                    winget install $packageName --accept-package-agreements --accept-source-agreements
-                }
-                "scoop" {
-                    scoop install $packageName
+            foreach ($pkg in $packages.profiles.$Profile.windows) {
+                if ([string]::IsNullOrWhiteSpace($pkg)) { continue }
+                if (Test-PackageInstalled -Manager $packageManager -Name $pkg) { Write-Info "Already installed: $pkg"; continue }
+                Write-Info "Installing package: $pkg"
+                switch ($packageManager) {
+                    "chocolatey" { if (-not (choco list --local-only | Select-String -Pattern "^$([regex]::Escape($pkg))\s")) { choco install $pkg -y } }
+                    "winget"     { winget install --id $pkg --silent --accept-package-agreements --accept-source-agreements }
+                    "scoop"      { scoop install $pkg }
                 }
             }
         }
 
-        # Also install top-level Windows packages list if present
+        # Install top-level Windows packages list if present
         if ($packages.windows) {
             foreach ($pkg in $packages.windows) {
                 if ([string]::IsNullOrWhiteSpace($pkg)) { continue }
@@ -361,10 +330,17 @@ function Deploy-Dotfiles {
 function Get-ProfilePackagesFile {
     param([string]$Profile)
     $candidates = @(
+        # Profile-specific overrides
         Join-Path $HOME ".cfg/profile/$Profile/packages.yml",
         Join-Path $HOME "profile/$Profile/packages.yml",
         Join-Path $HOME "dot_setup/profile/$Profile/packages.yml",
-        Join-Path $Script:Config.DotfilesDir "common/$($Script:Config.PackagesFile)"
+        # Common locations for the primary packages.yml
+        Join-Path $HOME ".cfg/common/$($Script:Config.PackagesFile)",
+        Join-Path $HOME "$($Script:Config.PackagesFile)",
+        Join-Path $HOME "common/$($Script:Config.PackagesFile)",
+        Join-Path $HOME "dot_setup/packages.yml",
+        Join-Path $Script:Config.DotfilesDir "common/$($Script:Config.PackagesFile)",
+        Join-Path $Script:Config.DotfilesDir "packages.yml"
     )
     foreach ($pf in $candidates) {
         if (Test-Path $pf) { return $pf }
@@ -602,14 +578,14 @@ function Start-Bootstrap {
     
     # Configure Windows
     if (Prompt-YesNo -Question "Apply Windows configuration from packages.yml?" -Default 'N') {
-        Set-WindowsConfiguration -PackagesFile $packagesPath
+        Set-WindowsConfiguration -PackagesFile $packagesFile
     } else {
         Write-Warning "Skipped Windows configuration by user choice"
     }
     
     # Enable Windows features (if admin)
     if (Prompt-YesNo -Question "Enable Windows optional features?" -Default 'N') {
-        Enable-WindowsFeatures -PackagesFile $packagesPath
+        Enable-WindowsFeatures -PackagesFile $packagesFile
     } else {
         Write-Warning "Skipped enabling Windows features by user choice"
     }

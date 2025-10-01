@@ -10,8 +10,16 @@ if (-not (Get-Module powershell-yaml -ListAvailable)) {
 
 Import-Module powershell-yaml
 
-# Define the path to the YAML file
-$yamlFilePath = "$HOME\packages.yml"
+# Locate packages.yml from common locations
+$candidates = @(
+  Join-Path $HOME ".cfg/common/packages.yml",
+  Join-Path $HOME "packages.yml",
+  Join-Path $HOME "common/packages.yml",
+  Join-Path $HOME "dot_setup/packages.yml"
+)
+$yamlFilePath = $null
+foreach ($pf in $candidates) { if (Test-Path $pf) { $yamlFilePath = $pf; break } }
+if (-not $yamlFilePath) { throw "packages.yml not found in expected locations: $($candidates -join ', ')" }
 
 # Parse the YAML file
 $packages = ConvertFrom-Yaml -Path $yamlFilePath
