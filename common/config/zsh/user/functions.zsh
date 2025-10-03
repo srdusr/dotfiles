@@ -13,72 +13,124 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         *)       CFG_OS="other" ;;
     esac
 
-    # Map system path to repository path
     _repo_path() {
         local f="$1"
 
-        # If it's an absolute path that's not in HOME, handle it specially
-        if [[ "$f" == /* && "$f" != "$HOME/"* ]]; then
-            echo "$CFG_OS/${f#/}"
-            return
+        # Normalize absolute or relative
+        if [[ "$f" == "$HOME/"* ]]; then
+            f="${f#$HOME/}"
+        elif [[ "$f" == "./"* ]]; then
+            f="${f#./}"
         fi
 
-        # Check for paths that should go to the repository root
+        # Already tracked? Use that
+        local dirs=("common/" "$CFG_OS/home/" "$CFG_OS/Users/")
+        for d in "${dirs[@]}"; do
+            local match="$(_config ls-files --full-name | grep -F "/$f" | grep -F "$d" || true)"
+            if [[ -n "$match" ]]; then
+                echo "$match"
+                return
+            fi
+        done
+
+        # Already a special repo path
         case "$f" in
-            common/*|linux/*|macos/*|windows/*|profile/*|README.md)
+            common/*|"$CFG_OS/home/"*|"$CFG_OS/Users/"*|profile/*|README.md)
                 echo "$f"
                 return
                 ;;
-            "$HOME/"*)
-                f="${f#$HOME/}"
-                ;;
         esac
 
-        # Default: put under OS-specific home
-        echo "$CFG_OS/home/$f"
+        # Map everything else dynamically
+        case "$f" in
+            *)
+                case "$CFG_OS" in
+                    linux)   echo "linux/home/$f" ;;
+                    macos)   echo "macos/Users/$f" ;;
+                    windows) echo "windows/Users/$f" ;;
+                    *)       echo "$CFG_OS/home/$f" ;;
+                esac
+                ;;
+        esac
     }
 
     _sys_path() {
         local repo_path="$1"
-        local os_path_pattern="$CFG_OS/"
 
-        # Handle OS-specific files that are not in the home subdirectory
-        if [[ "$repo_path" == "$os_path_pattern"* && "$repo_path" != */home/* ]]; then
-            echo "/${repo_path#$os_path_pattern}"
-            return
-        fi
+        # System HOME
+        local sys_home
+        case "$CFG_OS" in
+            linux|macos) sys_home="$HOME" ;;
+            windows)     sys_home="$USERPROFILE" ;;
+        esac
+
+        # Repo HOME roots
+        local repo_home
+        case "$CFG_OS" in
+            linux)   repo_home="linux/home" ;;
+            macos)   repo_home="macos/Users" ;;
+            windows) repo_home="windows/Users" ;;
+        esac
 
         case "$repo_path" in
-            common/scripts/*)
-                echo "$HOME/.scripts/${repo_path#common/scripts/}"
-                ;;
-            common/config/*)
-                case "$CFG_OS" in
-                    linux)
-                        local base="${XDG_CONFIG_HOME:-$HOME/.config}"
-                        echo "$base/${repo_path#common/config/}"
+            # Common files → $HOME/… but normalize well-known dirs
+            common/*)
+                local rel="${repo_path#common/}"
+
+                case "$rel" in
+                    # XDG config
+                    .config/*|config/*)
+                        local sub="${rel#*.config/}"
+                        sub="${sub#config/}"
+                        echo "${XDG_CONFIG_HOME:-$sys_home/.config}/$sub"
                         ;;
-                    macos)
-                        echo "$HOME/Library/Application Support/${repo_path#common/config/}"
+
+                    # XDG data (assets, wallpapers, icons, fonts…)
+                    assets/*|.local/share/*)
+                        local sub="${rel#assets/}"
+                        sub="${sub#.local/share/}"
+                        echo "${XDG_DATA_HOME:-$sys_home/.local/share}/$sub"
                         ;;
-                    windows)
-                        # Windows Bash (Git Bash, MSYS, WSL) respects LOCALAPPDATA
-                        echo "$LOCALAPPDATA\\${repo_path#common/config/}"
+
+                    # XDG cache (if you ever store cached scripts/config)
+                    .cache/*)
+                        local sub="${rel#.cache/}"
+                        echo "${XDG_CACHE_HOME:-$sys_home/.cache}/$sub"
                         ;;
+
+                    # Scripts
+                    .scripts/*|scripts/*)
+                        local sub="${rel#*.scripts/}"
+                        sub="${sub#scripts/}"
+                        echo "$sys_home/.scripts/$sub"
+                        ;;
+
+                    # Default: dump directly under $HOME
                     *)
-                        echo "$HOME/.config/${repo_path#common/config/}"
+                        echo "$sys_home/$rel"
                         ;;
                 esac
                 ;;
-            common/assets/*|profile/*|README.md)
-                echo "$HOME/.cfg/$repo_path"
+
+            # Profile files → $HOME/…
+            profile/*)
+                local rel="${repo_path#profile/}"
+                echo "$sys_home/$rel"
                 ;;
-            common/*)
-                echo "$HOME/.cfg/$repo_path"
+
+            # OS-specific home paths → $HOME or $USERPROFILE
+            "$repo_home"/*)
+                local rel="${repo_path#$repo_home/}"
+                echo "$sys_home/$rel"
                 ;;
-            */home/*)
-                echo "$HOME/${repo_path#*/home/}"
+
+            # OS-specific system paths outside home/Users → absolute
+            "$CFG_OS/"*)
+                local rel="${repo_path#$CFG_OS/}"
+                echo "/$rel"
                 ;;
+
+            # Fallback: treat as repo-only
             *)
                 echo "$HOME/.cfg/$repo_path"
                 ;;
@@ -106,68 +158,150 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
     # Main config command
     config() {
         local cmd="$1"; shift
-        local target_dir=""
-
-        # Parse optional --target flag for add
-        if [[ "$cmd" == "add" ]]; then
-            while [[ "$1" == --* ]]; do
-                case "$1" in
-                    --target|-t)
-                        target_dir="$2"
-                        shift 2
-                        ;;
-                    *)
-                        echo "Unknown option: $1"
-                        return 1
-                        ;;
-                esac
-            done
-        fi
 
         case "$cmd" in
             add)
                 local file_path
                 local git_opts=()
                 local files=()
+                local target_dir=""
 
-                # Parse arguments
+                # Parse optional --target flag before files
                 while [[ $# -gt 0 ]]; do
                     case "$1" in
                         --target|-t)
                             target_dir="$2"
                             shift 2
                             ;;
-                        -*)  # Any other flags are git flags
+                        -*)  # any other git flags
                             git_opts+=("$1")
                             shift
                             ;;
-                        *)   # Anything else is a file
+                        *)  # files
                             files+=("$1")
                             shift
                             ;;
                     esac
                 done
 
-                # Process each file
                 for file_path in "${files[@]}"; do
+                    # Store original for rel_path calculation
+                    local original_path="$file_path"
+
+                    # Make path absolute first
+                    if [[ "$file_path" != /* && "$file_path" != "$HOME/"* ]]; then
+                        file_path="$(pwd)/$file_path"
+                    fi
+
+                    # Check if file exists
+                    if [[ ! -e "$file_path" ]]; then
+                        echo "Error: File not found: $file_path"
+                        continue
+                    fi
+
+                    # Calculate relative path from original input
+                    local rel_path
+                    if [[ "$original_path" == "$HOME/"* ]]; then
+                        rel_path="${original_path#$HOME/}"
+                    elif [[ "$original_path" == "./"* ]]; then
+                        rel_path="${original_path#./}"
+                    else
+                        rel_path="$original_path"
+                    fi
+
+                    # Check if file is already tracked
+                    local existing_path="$(_config ls-files --full-name | grep -Fx "$(_repo_path "$file_path")" || true)"
                     local repo_path
-                    if [[ -n "$target_dir" ]]; then
-                        local rel_path
-                        if [[ "$file_path" == /* ]]; then
-                            rel_path="$(basename "$file_path")"
-                        else
-                            rel_path="$file_path"
-                        fi
+                    if [[ -n "$existing_path" ]]; then
+                        repo_path="$existing_path"
+                    elif [[ -n "$target_dir" ]]; then
                         repo_path="$target_dir/$rel_path"
                     else
                         repo_path="$(_repo_path "$file_path")"
                     fi
 
+                    # Copy file into bare repo
                     local full_repo_path="$HOME/.cfg/$repo_path"
                     mkdir -p "$(dirname "$full_repo_path")"
                     cp -a "$file_path" "$full_repo_path"
 
-                    # Only git flags + repo_path go to git
+                    # Add to git
+                    _config add "${git_opts[@]}" "$repo_path"
+
+                    echo "Added: $file_path -> $repo_path"
+                done
+                ;;
+
+            add)
+                local file_path
+                local git_opts=()
+                local files=()
+                local target_dir=""
+                local flatten=false
+
+                # Parse options
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --target|-t)
+                            target_dir="$2"
+                            shift 2
+                            ;;
+                        --flatten)
+                            flatten=true
+                            shift
+                            ;;
+                        -*)
+                            git_opts+=("$1")
+                            shift
+                            ;;
+                        *)
+                            files+=("$1")
+                            shift
+                            ;;
+                    esac
+                done
+
+                for file_path in "${files[@]}"; do
+                    local original_path="$file_path"
+
+                    if [[ "$file_path" != /* && "$file_path" != "$HOME/"* ]]; then
+                        file_path="$(pwd)/$file_path"
+                    fi
+
+                    if [[ ! -e "$file_path" ]]; then
+                        echo "Error: File not found: $file_path"
+                        continue
+                    fi
+
+                    # Calculate relative path
+                    local rel_path
+                    if [[ "$original_path" == "$HOME/"* ]]; then
+                        rel_path="${original_path#$HOME/}"
+                    elif [[ "$original_path" == "./"* ]]; then
+                        rel_path="${original_path#./}"
+                    else
+                        rel_path="$original_path"
+                    fi
+
+                    # Already tracked?
+                    local existing_path="$(_config ls-files --full-name | grep -Fx "$(_repo_path "$file_path")" || true)"
+                    local repo_path
+                    if [[ -n "$existing_path" ]]; then
+                        repo_path="$existing_path"
+                    elif [[ -n "$target_dir" ]]; then
+                        if $flatten; then
+                            repo_path="$target_dir/$(basename "$file_path")"
+                        else
+                            repo_path="$target_dir/$rel_path"
+                        fi
+                    else
+                        repo_path="$(_repo_path "$file_path")"
+                    fi
+
+                    # Copy and add
+                    local full_repo_path="$HOME/.cfg/$repo_path"
+                    mkdir -p "$(dirname "$full_repo_path")"
+                    cp -a "$file_path" "$full_repo_path"
                     _config add "${git_opts[@]}" "$repo_path"
 
                     echo "Added: $file_path -> $repo_path"
@@ -177,17 +311,43 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
             rm)
                 local rm_opts=""
                 local file_path_list=()
+                local target_dir=""
 
-                for arg in "$@"; do
-                    if [[ "$arg" == "-"* ]]; then
-                        rm_opts+=" $arg"
-                    else
-                        file_path_list+=("$arg")
-                    fi
+                # Parse options
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --target|-t)
+                            target_dir="$2"
+                            shift 2
+                            ;;
+                        -*)
+                            rm_opts+=" $1"
+                            shift
+                            ;;
+                        *)
+                            file_path_list+=("$1")
+                            shift
+                            ;;
+                    esac
                 done
 
                 for file_path in "${file_path_list[@]}"; do
-                    local repo_path="$(_repo_path "$file_path")"
+                    local repo_path
+                    # Check if already a repo path (exists in git index) - exact match
+                    if _config ls-files --full-name | grep -qFx "$file_path"; then
+                        repo_path="$file_path"
+                    elif [[ -n "$target_dir" ]]; then
+                        # Use target directory if specified
+                        local rel_path
+                        if [[ "$file_path" == "$HOME/"* ]]; then
+                            rel_path="${file_path#$HOME/}"
+                        else
+                            rel_path="${file_path#./}"
+                        fi
+                        repo_path="$target_dir/$rel_path"
+                    else
+                        repo_path="$(_repo_path "$file_path")"
+                    fi
 
                     if [[ "$rm_opts" == *"-r"* ]]; then
                         _config rm --cached -r "$repo_path"
@@ -195,8 +355,12 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                         _config rm --cached "$repo_path"
                     fi
 
-                    eval "rm $rm_opts \"$file_path\""
-                    echo "Removed: $file_path"
+                    # Compute system path for actual file removal
+                    local sys_file="$(_sys_path "$repo_path")"
+                    if [[ -e "$sys_file" ]]; then
+                        eval "rm $rm_opts \"$sys_file\""
+                    fi
+                    echo "Removed: $repo_path"
                 done
                 ;;
 
@@ -228,9 +392,16 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                 ;;
 
             status)
-                # Check for missing files and auto-sync existing ones
-                local auto_synced=()
+                local modified_files=()
                 local missing_files=()
+
+                # Colors like git
+                local RED="\033[31m"
+                local GREEN="\033[32m"
+                local YELLOW="\033[33m"
+                local BLUE="\033[34m"
+                local BOLD="\033[1m"
+                local RESET="\033[0m"
 
                 while read -r repo_file; do
                     local sys_file="$(_sys_path "$repo_file")"
@@ -240,31 +411,31 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
                         missing_files+=("$repo_file")
                     elif [[ -e "$sys_file" ]]; then
                         if ! diff -q "$full_repo_path" "$sys_file" >/dev/null 2>&1; then
-                            cp -fa "$sys_file" "$full_repo_path"
-                            auto_synced+=("$repo_file")
+                            modified_files+=("$repo_file")
                         fi
                     fi
                 done < <(_config ls-files)
 
                 # Report missing files
                 if [[ ${#missing_files[@]} -gt 0 ]]; then
-                    echo "=== Missing Files (consider removing from git) ==="
+                    echo -e "${BOLD}${RED}=== Missing Files (consider removing from git) ===${RESET}"
                     for repo_file in "${missing_files[@]}"; do
-                        echo "missing: $repo_file"
+                        echo -e " ${RED}deleted:${RESET}   $(_sys_path "$repo_file") -> $repo_file"
                     done
                     echo
                 fi
 
-                # Report auto-synced files
-                if [[ ${#auto_synced[@]} -gt 0 ]]; then
-                    echo "=== Auto-synced Files ==="
-                    for repo_file in "${auto_synced[@]}"; do
-                        echo "synced: $(_sys_path "$repo_file") -> $repo_file"
+                # Report modified files
+                if [[ ${#modified_files[@]} -gt 0 ]]; then
+                    echo -e "${BOLD}${YELLOW}=== Modified Files (different from system) ===${RESET}"
+                    for repo_file in "${modified_files[@]}"; do
+                        echo -e " ${YELLOW}modified:${RESET}  $(_sys_path "$repo_file") -> $repo_file"
                     done
                     echo
                 fi
 
-                _config status
+                # Finally, show underlying git status (with colors)
+                _config -c color.status=always status
                 ;;
 
             deploy|checkout)
@@ -314,7 +485,6 @@ if [[ -d "$HOME/.cfg" && -d "$HOME/.cfg/refs" ]]; then
         esac
     }
 fi
-
 
 # Make SUDO_ASKPASS agnostic: pick the first available askpass binary.
 # You can predefine SUDO_ASKPASS env var to force a particular path.

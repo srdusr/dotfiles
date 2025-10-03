@@ -2,12 +2,22 @@ $include /etc/inputrc
 
 "\f": clear-screen
 
-set bell-style none
+# Enable bracketed paste mode (allows pasting in TUI apps)
+set enable-bracketed-paste on
+#set enable-bracketed-paste off
+
+set echo-control-characters off
+
+# Bind Ctrl+V to accept pasted text
+#"\C-v": "\e[200~"
+#"\C-v": paste-from-clipboard
+
 set meta-flag on
 set input-meta on
 set convert-meta off
 set output-meta on
 set show-all-if-ambiguous on # set show-all-if-unmodified on
+set bell-style none
 
 # Color files by types
 # Note that this may cause completion text blink in some terminals (e.g. xterm).
@@ -39,6 +49,14 @@ $if mode=vi
   "\e[A": history-search-backward
   "\e[B": history-search-forward
   "jk" # escape
+
+  # Enable arrow keys (already default in readline)
+  "\e[D": backward-char
+  "\e[C": forward-char
+
+  # Allow Alt+h and Alt+l for navigation
+  "\eh": backward-char
+  "\el": forward-char
 $endif
 
 $if mode=emacs
@@ -72,6 +90,13 @@ $if mode=emacs
   "\e[H": beginning-of-line
   "\e[F": end-of-line
 
+  # Enable arrow keys (already default in readline)
+  "\e[D": backward-char
+  "\e[C": forward-char
+
+  # Allow Alt+h and Alt+l for navigation
+  "\eh": backward-char
+  "\el": forward-char
 $endif
 
 #set editing-mode emacs

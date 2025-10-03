@@ -1,10 +1,6 @@
 # Dotfiles Installation Packages Configuration
 # This file defines packages to install based on installation profiles and distribution-specific mappings
 
-# TODO:
-# tree-sitter-cli
-# make sure rust is installed, go pipx virtualenvwrapper
-
 #======================================
 # Installation Profiles
 #======================================

@@ -1,8 +1,8 @@
 # Recursion limits
 FUNCNEST=999
-
+#
 DISABLE_MAGIC_FUNCTIONS=true
-
+#
 # Enable various options for Zsh behavior
 setopt interactive_comments      # Allow comments to appear in interactive mode
 unsetopt BEEP                    # Disable the system beep (to prevent annoying beeps)
@@ -19,6 +19,10 @@ setopt AUTO_PUSHD                # Save more directory history, and use "cd -" w
 # Hide history of commands starting with a space
 setopt histignorespace           # Do not save commands that start with a space in the history
 
+setopt BANG_HIST EXTENDED_HISTORY INC_APPEND_HISTORY SHARE_HISTORY
+setopt HIST_EXPIRE_DUPS_FIRST HIST_IGNORE_DUPS HIST_IGNORE_ALL_DUPS
+setopt HIST_FIND_NO_DUPS HIST_IGNORE_SPACE HIST_SAVE_NO_DUPS
+setopt HIST_REDUCE_BLANKS HIST_VERIFY HIST_BEEP
 
 # --- Detect terminal control characters and behavior ---
 

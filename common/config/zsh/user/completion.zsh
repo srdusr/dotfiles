@@ -20,7 +20,6 @@ unset _comp_path
 # Skip the not really helpful global compinit
 skip_global_compinit=0
 
-DISABLE_MAGIC_FUNCTIONS=true
 
 
 #zstyle ':completion:*' menu select=1

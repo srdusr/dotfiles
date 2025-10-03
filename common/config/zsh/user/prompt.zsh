@@ -1,6 +1,20 @@
 #!/bin/zsh
 
-##########    Prompt(s)    ##########
+########## Prompt(s) ##########
+
+# Check if Nerd Fonts are installed
+typeset -g _has_nerd_fonts=0
+if fc-list | grep -qi nerd; then
+    _has_nerd_fonts=1
+fi
+
+# Set git branch icon based on font availability
+typeset -g _git_branch_icon
+if [[ $_has_nerd_fonts -eq 1 ]]; then
+    _git_branch_icon=$'\uE0A0'  # Nerd Font git branch icon
+else
+    _git_branch_icon="±"         # Fallback: plus-minus symbol
+fi
 
 # Autoload necessary functions for vcs_info and coloring
 autoload -Uz vcs_info
@@ -28,8 +42,8 @@ typeset -g _spinner_idx=0
 typeset -ga _spinner_frames=('⣾' '⣽' '⣻' '⢿' '⡿' '⣟' '⣯' '⣷')
 typeset -g _cmd_is_running=0
 typeset -g _show_spinner=0
-typeset -g _SPINNER_DELAY=5  # Only show spinner after 5 seconds
-typeset -g _FINISHED_DELAY=10  # Only show finished message after 10 seconds
+typeset -g _SPINNER_DELAY=5 # Only show spinner after 5 seconds
+typeset -g _FINISHED_DELAY=10 # Only show finished message after 10 seconds
 
 # Register the ZLE widget for spinner updates - do this early
 zle -N update_spinner
@@ -37,7 +51,7 @@ zle -N update_spinner
 # Cache git information to avoid repeated expensive operations
 typeset -g _git_cached_info=""
 typeset -g _git_cache_timestamp=0
-typeset -g _git_cache_lifetime=2  # seconds before cache expires
+typeset -g _git_cache_lifetime=2 # seconds before cache expires
 
 # Calculate how much space is available for the prompt components
 function available_space() {
@@ -48,8 +62,8 @@ function available_space() {
 # Check if we need to abbreviate git info
 function need_to_abbreviate_git() {
     local available=$(available_space)
-    local vi_mode_len=13  # Length of "-- INSERT --"
-    local prompt_base_len=20  # Base prompt elements length
+    local vi_mode_len=13 # Length of "-- INSERT --"
+    local prompt_base_len=20 # Base prompt elements length
     local path_len=${#${PWD/#$HOME/\~}}
     local git_full_len=0
 
@@ -70,9 +84,9 @@ function need_to_abbreviate_git() {
 
     # Determine if we need to abbreviate
     if [[ $total_needed -gt $available ]]; then
-        return 0  # Need to abbreviate
+        return 0 # Need to abbreviate
     else
-        return 1  # Don't need to abbreviate
+        return 1 # Don't need to abbreviate
     fi
 }
 
@@ -158,15 +172,14 @@ function configure_vcs_styles() {
     fi
 
     zstyle ':vcs_info:*' actionformats '%F{5}%F{2}%b%F{3}|%F{1}%a%F{5}%f '
-    zstyle ':vcs_info:*' formats '%F{208} '$'\uE0A0'' %f$(git_branch_test_color)%f%F{76}%c%F{3}%u%f '
+    zstyle ':vcs_info:*' formats "%F{208} ${_git_branch_icon} %f\$(git_branch_test_color)%f%F{76}%c%F{3}%u%f "
     zstyle ':vcs_info:git*+set-message:*' hooks git-untracked git-dynamic
 }
 
 # Show "untracked" status in git - with conditional abbreviation
 +vi-git-untracked() {
     if [[ $(git rev-parse --is-inside-work-tree 2> /dev/null) == 'true' ]] && \
-        git status --porcelain | grep '??' &> /dev/null ; then
-
+       git status --porcelain | grep '??' &> /dev/null ; then
         if need_to_abbreviate_git; then
             hook_com[unstaged]+='%F{196} !%f%F{15}u%f'
         else
@@ -184,7 +197,6 @@ function configure_vcs_styles() {
 ssh_name() {
     if [[ -n $SSH_CONNECTION ]]; then
         local ssh_info
-
         if need_to_abbreviate_git; then
             # Abbreviated SSH info
             ssh_info="ssh:%F{green}%n$nc%f"
@@ -217,7 +229,6 @@ function job_name() {
                 job_name="${title_jobs}"
                 job_length=$((${available}-70))
                 [ "${job_length}" -lt "0" ] && job_length=0
-
                 if [ "${job_length}" -gt 0 ]; then
                     job_name+="%F{green}$(jobs | grep + | tr -s " " | cut -d " " -f 4- | cut -b 1-${job_length} | sed "s/\(.*\)/\1/")%f"
                 else
@@ -226,7 +237,6 @@ function job_name() {
             fi
         fi
     fi
-
     echo "${job_name}"
 }
 
@@ -239,12 +249,12 @@ function should_show_spinner() {
         # Show spinner only after delay threshold
         if [[ $elapsed -ge $_SPINNER_DELAY ]]; then
             _show_spinner=1
-            return 0  # Yes, show spinner
+            return 0 # Yes, show spinner
         fi
     fi
 
     _show_spinner=0
-    return 1  # No, don't show spinner
+    return 1 # No, don't show spinner
 }
 
 # Update spinner animation - simplified version
@@ -258,10 +268,10 @@ function update_spinner() {
 function start_spinner_timer() {
     _spinner_idx=0
     _cmd_is_running=1
-    _show_spinner=0  # Start with spinner hidden until delay passes
+    _show_spinner=0 # Start with spinner hidden until delay passes
 
     # Set up the TRAPALRM for periodic updates - CRITICAL FIX
-    TMOUT=0.5  # Update spinner every 0.5 seconds
+    TMOUT=0.5 # Update spinner every 0.5 seconds
 
     # Define TRAPALRM function - this is key to the spinner working
     TRAPALRM() {
@@ -385,7 +395,6 @@ function exit_code_info() {
 
     if [[ $exit_code -ne 0 ]]; then
         local signal_name=""
-
         # Check if it's a signal
         if [[ $exit_code -gt 128 && $exit_code -le 165 ]]; then
             local signal_num=$((exit_code - 128))
@@ -398,12 +407,12 @@ function exit_code_info() {
         # Return formatted error code
         echo "%F{red}✘ $exit_code$signal_name%f"
     else
-        echo "%F{green}✓%f"  # Success indicator
+        echo "%F{green}✓%f" # Success indicator
     fi
 }
 
 abbreviated_path() {
-    local full_path="${PWD/#$HOME/~}"  # Replace $HOME with ~
+    local full_path="${PWD/#$HOME/~}" # Replace $HOME with ~
     local available=$(available_space)
 
     # If path is root
@@ -450,11 +459,10 @@ abbreviated_path() {
     for i in {1..$((last_index - 1))}; do
         [[ -n ${parts[i]} ]] && result+="/${parts[i]:0:1}"
     done
-
     result+="/${parts[last_index]}"
+
     echo "%F{4}${result}%f"
 }
-
 
 # Prompt variables
 user="%n"
@@ -482,14 +490,10 @@ v4="]"
 newline=$'\n'
 
 # Indicate INSERT mode for vi - NEVER truncate this
-function insert-mode () {
-    echo "-- INSERT --"
-}
+function insert-mode () { echo "-- INSERT --" }
 
 # Indicate NORMAL mode for vi - NEVER truncate this
-function normal-mode () {
-    echo "-- NORMAL --"
-}
+function normal-mode () { echo "-- NORMAL --" }
 
 # Vi mode indicator
 vi-mode-indicator () {
@@ -505,15 +509,15 @@ vi-mode-indicator () {
 # Prompt function to ensure the prompt stays on one line, even in narrow terminals
 function set-prompt() {
     vi-mode-indicator
-    configure_vcs_styles  # Dynamically set vcs styles based on available space
-    vcs_info  # Refresh vcs info with new styles
+    configure_vcs_styles # Dynamically set vcs styles based on available space
+    vcs_info # Refresh vcs info with new styles
 
     local available=$(available_space)
+
     if (( available < 14 )); then
         # Extremely narrow terminal — use minimal prompt
         PS1="${carriage_return}${dollar}${space}${empty_line_bottom}"
         RPROMPT='$(exit_code_info)'
-
     else
         # Path display - always show something for path, but adapt based on space
         local path_display="$(abbreviated_path)"
@@ -550,7 +554,7 @@ my_precmd() {
         _cmd_duration=0
     fi
 
-    stop_spinner_timer  # Make sure spinner is stopped
+    stop_spinner_timer # Make sure spinner is stopped
     vcs_info
     set-prompt
     vi-mode-indicator
@@ -609,12 +613,8 @@ function zle-line-init() {
     zle reset-prompt
     vi-mode-indicator
     case "${KEYMAP}" in
-        vicmd)
-            echo -ne '\e[1 q'
-            ;;
-        main|viins|*)
-            echo -ne '\e[5 q'
-            ;;
+        vicmd) echo -ne '\e[1 q' ;;
+        main|viins|*) echo -ne '\e[5 q' ;;
     esac
 }
 
@@ -625,12 +625,8 @@ function zle-keymap-select() {
     zle -R
     vi-mode-indicator
     case "${KEYMAP}" in
-        vicmd)
-            echo -ne '\e[1 q'
-            ;;
-        main|viins|*)
-            echo -ne '\e[5 q'
-            ;;
+        vicmd) echo -ne '\e[1 q' ;;
+        main|viins|*) echo -ne '\e[5 q' ;;
     esac
 }
 
@@ -648,7 +644,7 @@ function preexec() {
     _last_executed_command=$1
     _cmd_start_time=$(date +%s)
     _cmd_is_running=1
-    _show_spinner=0  # Reset spinner flag
+    _show_spinner=0 # Reset spinner flag
 
     # Start the spinner timer immediately
     start_spinner_timer

@@ -1,3 +1,9 @@
+# Source .profile if not already sourced
+if [ -z "$PROFILE_SOURCED" ]; then
+    [ -f "$HOME/.profile" ] && source "$HOME/.profile"
+    export PROFILE_SOURCED=1
+fi
+
 #######################################
 # XDG Base Directories
 #######################################
