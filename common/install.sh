@@ -10,13 +10,13 @@
 
 # POSIX-compatible shim: if not running under bash (e.g., invoked via `sh -c "$(curl ...)"`),
 # re-exec the remainder of this script with bash.
-if [ -z "${BASH_VERSION:-}" ]; then
-  tmp="$(mktemp)" || exit 1
-  # Read the rest of the script into a temp file, then exec bash on it
-  cat > "$tmp"
-  exec bash "$tmp" "$@"
-  exit 1
-fi
+#if [ -z "${BASH_VERSION:-}" ]; then
+#  tmp="$(mktemp)" || exit 1
+#  # Read the rest of the script into a temp file, then exec bash on it
+#  cat > "$tmp"
+#  exec bash "$tmp" "$@"
+#  exit 1
+#fi
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
