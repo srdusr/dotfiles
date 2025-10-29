@@ -50,6 +50,11 @@ Linux:
 ```sh
 # Requires `curl` to be installed
 curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh | bash
+
+# or
+curl -fsSL https://raw.githubusercontent.com/srdusr/dotfiles/main/common/install.sh -o install.sh
+chmod +x install.sh
+./install.sh
 ```
 
 **Windows PowerShell:**
